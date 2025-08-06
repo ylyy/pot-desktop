@@ -7,7 +7,7 @@ export default function AI() {
     const [apiKey, setApiKey] = useConfig('ai_selection_api_key', '');
     const [apiUrl, setApiUrl] = useConfig('ai_selection_api_url', 'http://aifoundry.unisoc.com:8099/v1');
     const [autoCopy, setAutoCopy] = useConfig('ai_selection_auto_copy', false);
-    const [closeOnFocusLost, setCloseOnFocusLost] = useConfig('ai_selection_close_on_focus_lost', true);
+    const [closeOnFocusLost, setCloseOnFocusLost] = useConfig('ai_selection_close_on_blur', true);
     const { t } = useTranslation();
 
     return (

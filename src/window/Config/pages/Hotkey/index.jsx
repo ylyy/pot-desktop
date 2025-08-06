@@ -50,7 +50,7 @@ export default function Hotkey() {
     const [inputTranslate, setInputTranslate] = useConfig('hotkey_input_translate', '');
     const [ocrRecognize, setOcrRecognize] = useConfig('hotkey_ocr_recognize', '');
     const [ocrTranslate, setOcrTranslate] = useConfig('hotkey_ocr_translate', '');
-    const [aiSelection, setAiSelection] = useConfig('hotkey_ai_selection', '');
+    const [aiSelection, setAiSelection] = useConfig('hotkey_ai_selection', 'Ctrl+Shift+A');
 
     const { t } = useTranslation();
     const toastStyle = useToastStyle();

@@ -58,6 +58,7 @@ void listen('tauri://move', () => {
 export default function AISelection() {
     const [closeOnBlur] = useConfig('ai_selection_close_on_blur', true);
     const [alwaysOnTop] = useConfig('ai_selection_always_on_top', false);
+    const [autoCopy] = useConfig('ai_selection_auto_copy', false);
     const [customButtons, setCustomButtons] = useConfig('ai_selection_custom_buttons', [
         {
             name: '翻译',
@@ -212,6 +213,14 @@ export default function AISelection() {
             setError('AI调用失败: ' + error.message);
         } finally {
             setIsLoading(false);
+            // 如果启用了自动复制，在AI响应完成后复制到剪贴板
+            if (autoCopy && aiResponse.trim()) {
+                try {
+                    await writeText(aiResponse);
+                } catch (error) {
+                    console.error('复制到剪贴板失败:', error);
+                }
+            }
         }
     };
 
