@@ -50,6 +50,7 @@ export default function Hotkey() {
     const [inputTranslate, setInputTranslate] = useConfig('hotkey_input_translate', '');
     const [ocrRecognize, setOcrRecognize] = useConfig('hotkey_ocr_recognize', '');
     const [ocrTranslate, setOcrTranslate] = useConfig('hotkey_ocr_translate', '');
+    const [aiSelection, setAiSelection] = useConfig('hotkey_ai_selection', '');
 
     const { t } = useTranslation();
     const toastStyle = useToastStyle();
@@ -233,6 +234,37 @@ export default function Hotkey() {
                                     className={`${ocrTranslate === '' && 'hidden'}`}
                                     onPress={() => {
                                         registerHandler('hotkey_ocr_translate', ocrTranslate);
+                                    }}
+                                >
+                                    {t('common.ok')}
+                                </Button>
+                            }
+                        />
+                    )}
+                </div>
+                <div className='config-item'>
+                    <h3 className='my-auto'>AI划词</h3>
+                    {aiSelection !== null && (
+                        <Input
+                            type='hotkey'
+                            variant='bordered'
+                            value={aiSelection}
+                            label={t('config.hotkey.set_hotkey')}
+                            className='max-w-[50%]'
+                            onKeyDown={(e) => {
+                                keyDown(e, setAiSelection);
+                            }}
+                            onFocus={() => {
+                                unregister(aiSelection);
+                                setAiSelection('');
+                            }}
+                            endContent={
+                                <Button
+                                    size='sm'
+                                    variant='flat'
+                                    className={`${aiSelection === '' && 'hidden'}`}
+                                    onPress={() => {
+                                        registerHandler('hotkey_ai_selection', aiSelection);
                                     }}
                                 >
                                     {t('common.ok')}

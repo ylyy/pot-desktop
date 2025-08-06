@@ -8,6 +8,7 @@ import History from '../pages/History';
 import Hotkey from '../pages/Hotkey';
 import Backup from '../pages/Backup';
 import About from '../pages/About';
+import AI from '../pages/AI';
 
 const routes = [
     {
@@ -21,6 +22,10 @@ const routes = [
     {
         path: '/recognize',
         element: <Recognize />,
+    },
+    {
+        path: '/ai',
+        element: <AI />,
     },
     {
         path: '/hotkey',

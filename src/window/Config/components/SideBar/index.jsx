@@ -8,6 +8,7 @@ import { MdKeyboardAlt } from 'react-icons/md';
 import { MdExtension } from 'react-icons/md';
 import { AiFillCloud } from 'react-icons/ai';
 import { FaHistory } from 'react-icons/fa';
+import { IoSparkles } from 'react-icons/io5';
 import { Button } from '@nextui-org/react';
 import React from 'react';
 
@@ -57,6 +58,18 @@ export default function SideBar() {
                 startContent={<PiTextboxFill className='text-[24px]' />}
             >
                 <div className='w-full'>{t('config.recognize.label')}</div>
+            </Button>
+            <Button
+                fullWidth
+                size='lg'
+                variant={setStyle('/ai')}
+                className='mb-[5px]'
+                onPress={() => {
+                    navigate('/ai');
+                }}
+                startContent={<IoSparkles className='text-[24px]' />}
+            >
+                <div className='w-full'>AI设置</div>
             </Button>
             <Button
                 fullWidth
