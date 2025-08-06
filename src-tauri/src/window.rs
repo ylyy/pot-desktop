@@ -1,10 +1,7 @@
-use std::fs;
-
 use crate::config::get;
 use crate::config::set;
 use crate::StringWrapper;
 use crate::APP;
-use dirs::cache_dir;
 use log::{info, warn};
 use tauri::Manager;
 use tauri::Monitor;
@@ -239,6 +236,7 @@ pub fn selection_translate() {
     window.emit("new_text", text).unwrap();
 }
 
+#[tauri::command(async)]
 pub fn selection_ai() {
     use selection::get_text;
     // Get Selected Text
@@ -460,8 +458,7 @@ pub fn open_config_window() {
             .additional_browser_args("--disable-web-security")
             .focused(true)
             .visible(true)
-            .width(800.0)
-            .height(600.0)
+            .inner_size(800.0, 600.0)
             .min_inner_size(600.0, 400.0)
             .build()
             .unwrap();
