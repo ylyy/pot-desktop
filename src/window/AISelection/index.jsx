@@ -127,7 +127,7 @@ export default function AISelection() {
         const handleKeyDown = (event) => {
             if (event.key === 'Enter' && event.ctrlKey) {
                 event.preventDefault();
-                if (customButtons.length > 0 && selectedText && !isLoading) {
+                if (customButtons.length > 0 && !isLoading) {
                     callAI(customButtons[0].prompt);
                 }
             }
@@ -140,7 +140,7 @@ export default function AISelection() {
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [customButtons, selectedText, isLoading]);
+    }, [customButtons, isLoading]);
 
     const handleNewText = (text) => {
         text = text.trim();
@@ -162,7 +162,13 @@ export default function AISelection() {
         setError('');
 
         // 替换提示词中的模板变量
-        const processedPrompt = prompt.replace(/{text}/g, selectedText);
+        let processedPrompt = prompt;
+        if (selectedText && selectedText.trim()) {
+            processedPrompt = prompt.replace(/{text}/g, selectedText);
+        } else {
+            // 如果没有选中文本，移除{text}占位符或使用默认文本
+            processedPrompt = prompt.replace(/{text}/g, '请提供一些内容');
+        }
 
         try {
             const response = await fetch(`${apiUrl}/chat-messages`, {
@@ -269,7 +275,7 @@ export default function AISelection() {
     };
 
     return (
-        <div className={`bg-background h-screen w-screen ${
+        <div className={`bg-content1 h-screen w-screen ${
             osType === 'Linux' && 'rounded-[10px] border-1 border-default-100'
         }`}>
             <div className='fixed top-[5px] left-[5px] right-[5px] h-[30px]' data-tauri-drag-region='true' />
@@ -343,7 +349,7 @@ export default function AISelection() {
                                 <div className='flex items-center gap-2'>
                                     <div className='text-sm text-default-600'>自定义AI功能：</div>
                                     <div className='text-xs text-default-400'>
-                                        (Ctrl+Enter 快速调用第一个功能)
+                                        (Ctrl+Enter 快速调用第一个功能，无需选中文本)
                                     </div>
                                 </div>
                                 <Button
@@ -363,7 +369,7 @@ export default function AISelection() {
                                         size='sm'
                                         color='secondary'
                                         variant='flat'
-                                        isDisabled={isLoading || !selectedText}
+                                        isDisabled={isLoading}
                                         onPress={() => callAI(button.prompt)}
                                         className='relative group'
                                     >
@@ -447,7 +453,7 @@ export default function AISelection() {
                                             清除错误
                                         </Button>
                                     </div>
-                                ) : aiResponse || '点击上方按钮开始AI对话'}
+                                ) : aiResponse || '点击上方按钮开始AI对话，无需选中文本'}
                             </div>
                         </CardBody>
                     </Card>
