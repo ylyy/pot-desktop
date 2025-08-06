@@ -114,6 +114,33 @@
                 "visible": false,
                 "url": "daemon.html",
                 "additionalBrowserArgs": "--disable-web-security"
+            },
+            {
+                "title": "AI划词",
+                "label": "ai_selection",
+                "visible": false,
+                "url": "index.html",
+                "width": 600,
+                "height": 500,
+                "minWidth": 400,
+                "minHeight": 300,
+                "decorations": true,
+                "alwaysOnTop": false,
+                "skipTaskbar": true,
+                "additionalBrowserArgs": "--disable-web-security"
+            },
+            {
+                "title": "配置",
+                "label": "config",
+                "visible": false,
+                "url": "index.html",
+                "width": 800,
+                "height": 600,
+                "minWidth": 600,
+                "minHeight": 400,
+                "decorations": true,
+                "alwaysOnTop": false,
+                "additionalBrowserArgs": "--disable-web-security"
             }
         ],
         "systemTray": {

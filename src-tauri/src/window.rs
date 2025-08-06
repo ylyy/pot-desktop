@@ -10,6 +10,7 @@ use tauri::Manager;
 use tauri::Monitor;
 use tauri::Window;
 use tauri::WindowBuilder;
+use tauri::WindowUrl;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use window_shadows::set_shadow;
 
@@ -238,6 +239,27 @@ pub fn selection_translate() {
     window.emit("new_text", text).unwrap();
 }
 
+pub fn selection_ai() {
+    use selection::get_text;
+    // Get Selected Text
+    let text = get_text();
+    if !text.trim().is_empty() {
+        let app_handle = APP.get().unwrap();
+        // Write into State
+        let state: tauri::State<StringWrapper> = app_handle.state();
+        state.0.lock().unwrap().replace_range(.., &text);
+    }
+
+    let (window, _exists) = build_window("ai_selection", "AI划词");
+    window
+        .set_min_size(Some(tauri::LogicalSize::new(400, 300)))
+        .unwrap();
+    window.set_size(tauri::LogicalSize::new(600, 500)).unwrap();
+    window.center().unwrap();
+    window.show().unwrap();
+    window.emit("new_text", text).unwrap();
+}
+
 pub fn input_translate() {
     let app_handle = APP.get().unwrap();
     // Clear State
@@ -408,4 +430,41 @@ pub fn updater_window() {
         .unwrap();
     window.set_size(tauri::LogicalSize::new(600, 400)).unwrap();
     window.center().unwrap();
+}
+
+#[tauri::command(async)]
+pub fn ai_selection_window() {
+    let (window, _exists) = build_window("ai_selection", "AI划词");
+    window
+        .set_min_size(Some(tauri::LogicalSize::new(400, 300)))
+        .unwrap();
+    window.set_size(tauri::LogicalSize::new(600, 500)).unwrap();
+    window.center().unwrap();
+    window.show().unwrap();
+}
+
+#[tauri::command(async)]
+pub fn open_config_window() {
+    let app_handle = APP.get().unwrap();
+    match app_handle.get_window("config") {
+        Some(v) => {
+            v.set_focus().unwrap();
+        }
+        None => {
+            WindowBuilder::new(
+                app_handle,
+                "config",
+                WindowUrl::App("index.html".into()),
+            )
+            .title("配置")
+            .additional_browser_args("--disable-web-security")
+            .focused(true)
+            .visible(true)
+            .width(800.0)
+            .height(600.0)
+            .min_inner_size(600.0, 400.0)
+            .build()
+            .unwrap();
+        }
+    }
 }

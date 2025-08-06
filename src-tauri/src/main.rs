@@ -34,6 +34,9 @@ use tray::*;
 use updater::check_update;
 use window::config_window;
 use window::updater_window;
+use window::selection_ai;
+use window::ai_selection_window;
+use window::open_config_window;
 
 // Global AppHandle
 pub static APP: OnceCell<tauri::AppHandle> = OnceCell::new();
@@ -141,6 +144,9 @@ fn main() {
             register_shortcut_by_frontend,
             update_tray,
             updater_window,
+            selection_ai,
+            ai_selection_window,
+            open_config_window,
             screenshot,
             lang_detect,
             webdav,

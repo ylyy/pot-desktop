@@ -5,6 +5,7 @@ use crate::window::input_translate;
 use crate::window::ocr_recognize;
 use crate::window::ocr_translate;
 use crate::window::updater_window;
+use crate::window::selection_ai;
 use log::info;
 use tauri::CustomMenuItem;
 use tauri::GlobalShortcutManager;
@@ -109,6 +110,7 @@ pub fn tray_event_handler<'a>(app: &'a AppHandle, event: SystemTrayEvent) {
             "copy_disable" => on_auto_copy_click(app, "disable"),
             "ocr_recognize" => on_ocr_recognize_click(),
             "ocr_translate" => on_ocr_translate_click(),
+            "ai_selection" => on_ai_selection_click(),
             "config" => on_config_click(),
             "check_update" => on_check_update_click(),
             "view_log" => on_view_log_click(app),
@@ -181,6 +183,10 @@ fn on_ocr_translate_click() {
     ocr_translate();
 }
 
+fn on_ai_selection_click() {
+    selection_ai();
+}
+
 fn on_config_click() {
     config_window();
 }
@@ -251,6 +257,7 @@ fn tray_menu_zh_cn() -> tauri::SystemTrayMenu {
     let copy_disable = CustomMenuItem::new("copy_disable", "关闭");
     let ocr_recognize = CustomMenuItem::new("ocr_recognize", "文字识别");
     let ocr_translate = CustomMenuItem::new("ocr_translate", "截图翻译");
+    let ai_selection = CustomMenuItem::new("ai_selection", "AI划词");
     let config = CustomMenuItem::new("config", "偏好设置");
     let check_update = CustomMenuItem::new("check_update", "检查更新");
     let restart = CustomMenuItem::new("restart", "重启应用");
@@ -271,6 +278,7 @@ fn tray_menu_zh_cn() -> tauri::SystemTrayMenu {
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(ocr_recognize)
         .add_item(ocr_translate)
+        .add_item(ai_selection)
         .add_native_item(SystemTrayMenuItem::Separator)
         .add_item(config)
         .add_item(check_update)

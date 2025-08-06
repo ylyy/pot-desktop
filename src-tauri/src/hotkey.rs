@@ -1,5 +1,5 @@
 use crate::config::{get, set};
-use crate::window::{input_translate, ocr_recognize, ocr_translate, selection_translate};
+use crate::window::{input_translate, ocr_recognize, ocr_translate, selection_translate, selection_ai};
 use crate::APP;
 use log::{info, warn};
 use tauri::{AppHandle, GlobalShortcutManager};
@@ -54,6 +54,7 @@ pub fn register_shortcut(shortcut: &str) -> Result<(), String> {
         }
         "hotkey_ocr_recognize" => register(app_handle, "hotkey_ocr_recognize", ocr_recognize, "")?,
         "hotkey_ocr_translate" => register(app_handle, "hotkey_ocr_translate", ocr_translate, "")?,
+        "hotkey_ai_selection" => register(app_handle, "hotkey_ai_selection", selection_ai, "")?,
         "all" => {
             register(
                 app_handle,
@@ -64,6 +65,7 @@ pub fn register_shortcut(shortcut: &str) -> Result<(), String> {
             register(app_handle, "hotkey_input_translate", input_translate, "")?;
             register(app_handle, "hotkey_ocr_recognize", ocr_recognize, "")?;
             register(app_handle, "hotkey_ocr_translate", ocr_translate, "")?;
+            register(app_handle, "hotkey_ai_selection", selection_ai, "")?;
         }
         _ => {}
     }
@@ -91,6 +93,9 @@ pub fn register_shortcut_by_frontend(name: &str, shortcut: &str) -> Result<(), S
         }
         "hotkey_ocr_translate" => {
             register(app_handle, "hotkey_ocr_translate", ocr_translate, shortcut)?
+        }
+        "hotkey_ai_selection" => {
+            register(app_handle, "hotkey_ai_selection", selection_ai, shortcut)?
         }
         _ => {}
     }

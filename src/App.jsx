@@ -6,22 +6,16 @@ import React, { useEffect } from 'react';
 import { useTheme } from 'next-themes';
 
 import { invoke } from '@tauri-apps/api/tauri';
-import Screenshot from './window/Screenshot';
-import Translate from './window/Translate';
-import Recognize from './window/Recognize';
-import Updater from './window/Updater';
-import { store } from './utils/store';
+import AISelection from './window/AISelection';
 import Config from './window/Config';
+import { store } from './utils/store';
 import { useConfig } from './hooks';
 import './style.css';
 import './i18n';
 
 const windowMap = {
-    translate: <Translate />,
-    screenshot: <Screenshot />,
-    recognize: <Recognize />,
+    ai_selection: <AISelection />,
     config: <Config />,
-    updater: <Updater />,
 };
 
 export default function App() {
