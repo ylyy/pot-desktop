@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>划词AI助手示例</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 40px;
+            line-height: 1.6;
+            background: #f5f5f5;
+        }
+
+        .content {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* AI弹窗样式 */
+        .ai-popup {
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 8px;
+            display: none;
+            z-index: 10000;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* AI功能按钮容器 */
+        .ai-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            max-width: 320px;
+        }
+
+        /* 单个AI功能按钮 */
+        .ai-button {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border: none;
+            background: #f0f0f0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .ai-button:hover {
+            background: #e0e0e0;
+            transform: translateY(-1px);
+        }
+
+        .ai-button:active {
+            transform: translateY(0);
+        }
+
+        /* 图标样式 */
+        .ai-button .icon {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 不同功能的图标颜色 */
+        .translate { color: #4285f4; }
+        .explain { color: #34a853; }
+        .summarize { color: #fbbc04; }
+        .rewrite { color: #ea4335; }
+        .grammar { color: #9c27b0; }
+
+        /* 三角形指示器 */
+        .ai-popup::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 6px solid white;
+            filter: drop-shadow(0 -2px 2px rgba(0,0,0,0.1));
+        }
+
+        /* 示例文本样式 */
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 16px;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>划词AI助手示例</h1>
+        <p>这是一个类似豆包的划词AI助手功能演示。<span class="highlight">选中任意文本</span>，会自动弹出AI功能按钮。</p>
+        
+        <p>The Electron framework lets you write cross-platform desktop applications using JavaScript, HTML and CSS. It is based on Node.js and Chromium and is used by the Atom editor and many other apps.</p>
+        
+        <p>Electron 是一个使用 JavaScript、HTML 和 CSS 构建桌面应用程序的框架。 嵌入 Chromium 和 Node.js 到二进制的 Electron 允许您保持一个 JavaScript 代码代码库并创建在Windows上运行的跨平台应用 macOS和Linux——不需要本地开发经验。</p>
+
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+    </div>
+
+    <!-- AI功能弹窗 -->
+    <div class="ai-popup" id="aiPopup">
+        <div class="ai-buttons">
+            <button class="ai-button" data-action="translate">
+                <span class="icon translate">🌐</span>
+                <span>翻译</span>
+            </button>
+            <button class="ai-button" data-action="explain">
+                <span class="icon explain">💡</span>
+                <span>解释</span>
+            </button>
+            <button class="ai-button" data-action="summarize">
+                <span class="icon summarize">📝</span>
+                <span>总结</span>
+            </button>
+            <button class="ai-button" data-action="rewrite">
+                <span class="icon rewrite">✏️</span>
+                <span>改写</span>
+            </button>
+            <button class="ai-button" data-action="grammar">
+                <span class="icon grammar">✔️</span>
+                <span>语法检查</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 获取弹窗元素
+        const aiPopup = document.getElementById('aiPopup');
+        let selectedText = '';
+        let selectionTimeout = null;
+
+        // 监听文本选中事件
+        document.addEventListener('mouseup', handleTextSelection);
+        document.addEventListener('touchend', handleTextSelection);
+
+        function handleTextSelection(e) {
+            // 清除之前的定时器
+            if (selectionTimeout) {
+                clearTimeout(selectionTimeout);
+            }
+
+            // 延迟处理，确保选中操作完成
+            selectionTimeout = setTimeout(() => {
+                const selection = window.getSelection();
+                const text = selection.toString().trim();
+
+                // 如果没有选中文本，隐藏弹窗
+                if (!text) {
+                    hidePopup();
+                    return;
+                }
+
+                // 如果点击的是弹窗内部，不处理
+                if (aiPopup.contains(e.target)) {
+                    return;
+                }
+
+                // 保存选中的文本
+                selectedText = text;
+
+                // 获取选中区域的位置信息
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+
+                // 显示弹窗
+                showPopup(rect);
+            }, 10);
+        }
+
+        function showPopup(rect) {
+            // 计算弹窗位置（在选中文本下方居中）
+            const popupWidth = 320; // 弹窗最大宽度
+            const popupHeight = 100; // 预估高度
+            const padding = 10; // 与选中文本的间距
+
+            let left = rect.left + (rect.width - popupWidth) / 2;
+            let top = rect.bottom + padding;
+
+            // 确保弹窗不超出视窗边界
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // 水平边界检查
+            if (left < 10) {
+                left = 10;
+            } else if (left + popupWidth > viewportWidth - 10) {
+                left = viewportWidth - popupWidth - 10;
+            }
+
+            // 垂直边界检查（如果下方空间不够，显示在上方）
+            if (top + popupHeight > viewportHeight - 10) {
+                top = rect.top - popupHeight - padding;
+                // 调整三角形指示器位置
+                aiPopup.classList.add('popup-top');
+            } else {
+                aiPopup.classList.remove('popup-top');
+            }
+
+            // 设置弹窗位置并显示
+            aiPopup.style.left = `${left}px`;
+            aiPopup.style.top = `${top}px`;
+            aiPopup.style.display = 'block';
+
+            // 调整三角形指示器的水平位置
+            const triangleLeft = rect.left + rect.width / 2 - left;
+            aiPopup.style.setProperty('--triangle-left', `${triangleLeft}px`);
+        }
+
+        function hidePopup() {
+            aiPopup.style.display = 'none';
+            selectedText = '';
+        }
+
+        // 点击页面其他地方隐藏弹窗
+        document.addEventListener('mousedown', (e) => {
+            if (!aiPopup.contains(e.target) && aiPopup.style.display === 'block') {
+                hidePopup();
+            }
+        });
+
+        // 监听键盘事件（ESC键隐藏弹窗）
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hidePopup();
+            }
+        });
+
+        // 处理AI功能按钮点击
+        document.querySelectorAll('.ai-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = button.dataset.action;
+                handleAIAction(action, selectedText);
+            });
+        });
+
+        function handleAIAction(action, text) {
+            console.log(`执行AI功能: ${action}`);
+            console.log(`选中文本: ${text}`);
+
+            // 在实际应用中，这里会调用相应的AI接口
+            // 例如通过 IPC 与主进程通信，调用 AI API
+            if (window.electronAPI) {
+                window.electronAPI.performAIAction({
+                    action: action,
+                    text: text
+                });
+            } else {
+                // 非 Electron 环境下的模拟
+                alert(`AI功能: ${action}\n\n选中文本:\n${text}`);
+            }
+
+            // 执行后隐藏弹窗
+            hidePopup();
+        }
+
+        // 添加弹窗在上方时的样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .ai-popup.popup-top::before {
+                top: auto;
+                bottom: -6px;
+                border-bottom: none;
+                border-top: 6px solid white;
+                filter: drop-shadow(0 2px 2px rgba(0,0,0,0.1));
+            }
+            
+            .ai-popup::before {
+                left: var(--triangle-left, 50%);
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
