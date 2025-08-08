@@ -110,7 +110,8 @@ class ConfigStore {
                 maxTextLength: 5000,
                 showTrayIcon: true,
                 enableClipboardWatch: false,
-                clipboardWatchInterval: 500
+                clipboardWatchInterval: 500,
+                triggerMode: 'shortcut' // shortcut, smart, clipboard
             },
             
             // 窗口设置

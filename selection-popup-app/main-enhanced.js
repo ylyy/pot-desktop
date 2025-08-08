@@ -37,12 +37,19 @@ app.whenReady().then(() => {
     
     // 根据配置启动功能
     const config = configStore.get('general');
-    if (config.enableClipboardWatch) {
-        startClipboardWatcher();
-    }
     
-    // 注册全局快捷键
-    registerGlobalShortcut(config.shortcut || 'CommandOrControl+Q');
+    // 根据触发方式启动相应功能
+    const triggerMode = config.triggerMode || 'shortcut'; // shortcut, clipboard, smart
+    
+    if (triggerMode === 'clipboard' && config.enableClipboardWatch) {
+        startClipboardWatcher();
+    } else if (triggerMode === 'smart') {
+        // 启动智能划词检测
+        startSmartSelectionDetector();
+    } else {
+        // 默认使用快捷键方式
+        registerGlobalShortcut(config.shortcut || 'CommandOrControl+Q');
+    }
     
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -130,17 +137,40 @@ function createTray() {
             }
         },
         {
-            label: '划词功能',
-            type: 'checkbox',
-            checked: configStore.get('general.enableClipboardWatch'),
-            click: (menuItem) => {
-                configStore.set('general.enableClipboardWatch', menuItem.checked);
-                if (menuItem.checked) {
-                    startClipboardWatcher();
-                } else {
-                    stopClipboardWatcher();
+            label: '触发方式',
+            submenu: [
+                {
+                    label: '快捷键触发',
+                    type: 'radio',
+                    checked: configStore.get('general.triggerMode') === 'shortcut' || !configStore.get('general.triggerMode'),
+                    click: () => {
+                        configStore.set('general.triggerMode', 'shortcut');
+                        app.relaunch();
+                        app.exit();
+                    }
+                },
+                {
+                    label: '智能划词（直接触发）',
+                    type: 'radio',
+                    checked: configStore.get('general.triggerMode') === 'smart',
+                    click: () => {
+                        configStore.set('general.triggerMode', 'smart');
+                        app.relaunch();
+                        app.exit();
+                    }
+                },
+                {
+                    label: '剪贴板监听',
+                    type: 'radio',
+                    checked: configStore.get('general.triggerMode') === 'clipboard',
+                    click: () => {
+                        configStore.set('general.triggerMode', 'clipboard');
+                        configStore.set('general.enableClipboardWatch', true);
+                        app.relaunch();
+                        app.exit();
+                    }
                 }
-            }
+            ]
         },
         { type: 'separator' },
         {
@@ -597,6 +627,84 @@ function startClipboardWatcher() {
     }, interval);
 }
 
+// 智能文本选择检测
+let lastMouseUpTime = 0;
+let lastCheckTime = 0;
+let lastSelectedText = '';
+let selectionDetectorInterval = null;
+let isDetectorRunning = false;
+
+function startSmartSelectionDetector() {
+    if (isDetectorRunning) return;
+    
+    isDetectorRunning = true;
+    console.log('启动智能划词检测...');
+    
+    // 每200ms检查一次
+    selectionDetectorInterval = setInterval(() => {
+        const now = Date.now();
+        
+        // 避免频繁检查
+        if (now - lastCheckTime < 200) return;
+        lastCheckTime = now;
+        
+        // 保存当前剪贴板内容
+        const oldClipboard = clipboard.readText();
+        
+        try {
+            // 模拟复制操作来获取选中的文本
+            if (process.platform === 'darwin') {
+                // macOS
+                const { execSync } = require('child_process');
+                execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
+            } else {
+                // Windows/Linux
+                const robot = require('robotjs');
+                robot.keyTap('c', process.platform === 'darwin' ? 'command' : 'control');
+            }
+            
+            // 等待剪贴板更新
+            setTimeout(() => {
+                const currentText = clipboard.readText();
+                
+                // 检查是否有新的文本被选中
+                if (currentText && 
+                    currentText !== oldClipboard && 
+                    currentText !== lastSelectedText &&
+                    currentText.trim().length > 0 &&
+                    currentText.trim().length <= configStore.get('general.maxTextLength')) {
+                    
+                    console.log('检测到文本选择:', currentText.substring(0, 50) + '...');
+                    lastSelectedText = currentText;
+                    
+                    // 获取鼠标位置并显示悬浮窗
+                    const mousePos = screen.getCursorScreenPoint();
+                    showFloatingWindow(mousePos, currentText);
+                }
+                
+                // 恢复原剪贴板内容
+                if (currentText !== oldClipboard) {
+                    setTimeout(() => {
+                        clipboard.writeText(oldClipboard);
+                    }, 50);
+                }
+            }, 100);
+            
+        } catch (e) {
+            // 忽略错误，继续运行
+        }
+    }, 200);
+}
+
+function stopSmartSelectionDetector() {
+    if (selectionDetectorInterval) {
+        clearInterval(selectionDetectorInterval);
+        selectionDetectorInterval = null;
+        isDetectorRunning = false;
+        console.log('停止智能划词检测');
+    }
+}
+
 // 停止剪贴板监听
 function stopClipboardWatcher() {
     if (clipboardWatcher) {
@@ -670,6 +778,8 @@ app.on('will-quit', () => {
     if (clipboardWatcher) {
         clearInterval(clipboardWatcher);
     }
+    // 停止智能划词检测
+    stopSmartSelectionDetector();
 });
 
 app.on('window-all-closed', () => {

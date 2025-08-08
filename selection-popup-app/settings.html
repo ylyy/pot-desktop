@@ -471,15 +471,31 @@
                 <h2>通用设置</h2>
 
                 <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="autoStart"> 开机自动启动
-                    </label>
+                    <label>触发方式</label>
+                    <select id="triggerMode" onchange="updateTriggerModeUI()">
+                        <option value="shortcut">快捷键触发（需按快捷键）</option>
+                        <option value="smart">智能划词（直接触发）</option>
+                        <option value="clipboard">剪贴板监听</option>
+                    </select>
+                    <div class="help-text" style="margin-top: 8px;">
+                        <small style="color: #666;">
+                            • 快捷键触发：选中文本后按快捷键<br>
+                            • 智能划词：选中文本自动弹出（推荐）<br>
+                            • 剪贴板监听：监听剪贴板变化
+                        </small>
+                    </div>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="shortcutGroup">
                     <label>全局快捷键</label>
                     <input type="text" id="shortcut" value="Ctrl+Q" readonly>
                     <small style="color: #666;">点击输入框后按下想要的快捷键组合</small>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="autoStart"> 开机自动启动
+                    </label>
                 </div>
 
                 <div class="form-group">
@@ -496,7 +512,7 @@
                     <input type="number" id="maxTextLength" min="100" max="10000" value="5000">
                 </div>
 
-                <div class="form-group">
+                <div class="form-group" id="clipboardWatchGroup" style="display: none;">
                     <label>
                         <input type="checkbox" id="enableClipboardWatch"> 启用剪贴板监听
                     </label>

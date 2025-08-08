@@ -253,6 +253,10 @@ async function loadGeneralSettings() {
     document.getElementById('theme').value = general.theme;
     document.getElementById('maxTextLength').value = general.maxTextLength;
     document.getElementById('enableClipboardWatch').checked = general.enableClipboardWatch;
+    document.getElementById('triggerMode').value = general.triggerMode || 'shortcut';
+    
+    // 更新UI显示
+    updateTriggerModeUI();
 }
 
 // 保存通用设置
@@ -262,11 +266,25 @@ async function saveGeneralSettings() {
         shortcut: document.getElementById('shortcut').value,
         theme: document.getElementById('theme').value,
         maxTextLength: parseInt(document.getElementById('maxTextLength').value),
-        enableClipboardWatch: document.getElementById('enableClipboardWatch').checked
+        enableClipboardWatch: document.getElementById('enableClipboardWatch').checked,
+        triggerMode: document.getElementById('triggerMode').value
     };
     
     await window.electronAPI.setConfig('general', generalConfig);
-    alert('通用设置已保存');
+    alert('通用设置已保存，需要重启应用生效');
+}
+
+// 更新触发方式UI
+function updateTriggerModeUI() {
+    const triggerMode = document.getElementById('triggerMode').value;
+    
+    // 显示/隐藏快捷键设置
+    document.getElementById('shortcutGroup').style.display = 
+        triggerMode === 'shortcut' ? 'block' : 'none';
+    
+    // 显示/隐藏剪贴板监听设置
+    document.getElementById('clipboardWatchGroup').style.display = 
+        triggerMode === 'clipboard' ? 'block' : 'none';
 }
 
 // 快捷键输入
