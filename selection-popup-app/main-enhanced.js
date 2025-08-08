@@ -241,6 +241,8 @@ async function callAIAPI(data) {
             return await callAzureOpenAI(data, apiConfig.azure);
         case 'custom':
             return await callCustomAPI(data, apiConfig.custom);
+        case 'dify':
+            return await callDifyAPI(data, apiConfig.dify);
         default:
             throw new Error('未配置API提供商');
     }
@@ -313,26 +315,212 @@ async function callCustomAPI(data, config) {
     let body = config.bodyTemplate || '{}';
     body = body.replace('{text}', data.text);
     body = body.replace('{prompt}', data.prompt || data.text);
+    body = body.replace('{query}', data.text);
     
-    const response = await axios({
-        method: config.method || 'POST',
-        url: config.url,
-        headers: config.headers || {},
-        data: JSON.parse(body)
-    });
+    // 解析body为对象以便修改
+    let bodyObj = JSON.parse(body);
     
-    // 尝试从响应中提取结果
-    if (typeof response.data === 'string') {
-        return response.data;
-    } else if (response.data.result) {
-        return response.data.result;
-    } else if (response.data.data) {
-        return response.data.data;
-    } else if (response.data.choices && response.data.choices[0]) {
-        return response.data.choices[0].message?.content || response.data.choices[0].text;
+    // 如果是dify API，设置必要的参数
+    if (config.url.includes('chat-messages')) {
+        bodyObj = {
+            inputs: {},
+            query: data.text,
+            response_mode: "streaming",
+            conversation_id: "",
+            user: "user-" + Date.now(),
+            files: []
+        };
     }
     
-    return JSON.stringify(response.data);
+    // 检查是否是流式API
+    const isStreaming = bodyObj.response_mode === "streaming" || config.streaming;
+    
+    if (isStreaming) {
+        // 流式处理
+        return new Promise((resolve, reject) => {
+            const https = require('https');
+            const http = require('http');
+            const url = require('url');
+            
+            const parsedUrl = url.parse(config.url);
+            const protocol = parsedUrl.protocol === 'https:' ? https : http;
+            
+            const options = {
+                hostname: parsedUrl.hostname,
+                port: parsedUrl.port,
+                path: parsedUrl.path,
+                method: config.method || 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...config.headers,
+                    'Accept': 'text/event-stream'
+                }
+            };
+            
+            let fullResponse = '';
+            
+            const req = protocol.request(options, (res) => {
+                res.setEncoding('utf8');
+                
+                res.on('data', (chunk) => {
+                    // 解析SSE数据
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (data.event === 'message' && data.answer) {
+                                    fullResponse += data.answer;
+                                    // 发送增量更新到结果窗口
+                                    if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                                        global.currentResultWindow.webContents.send('update-result', {
+                                            text: fullResponse,
+                                            incremental: data.answer,
+                                            streaming: true
+                                        });
+                                    }
+                                } else if (data.event === 'message_end') {
+                                    // 流结束
+                                    resolve(fullResponse);
+                                }
+                            } catch (e) {
+                                // 忽略解析错误
+                            }
+                        }
+                    }
+                });
+                
+                res.on('end', () => {
+                    resolve(fullResponse);
+                });
+            });
+            
+            req.on('error', (e) => {
+                reject(e);
+            });
+            
+            req.write(JSON.stringify(bodyObj));
+            req.end();
+        });
+    } else {
+        // 非流式处理（原有逻辑）
+        const response = await axios({
+            method: config.method || 'POST',
+            url: config.url,
+            headers: config.headers || {},
+            data: bodyObj
+        });
+        
+        // 尝试从响应中提取结果
+        if (typeof response.data === 'string') {
+            return response.data;
+        } else if (response.data.result) {
+            return response.data.result;
+        } else if (response.data.data) {
+            return response.data.data;
+        } else if (response.data.choices && response.data.choices[0]) {
+            return response.data.choices[0].message?.content || response.data.choices[0].text;
+        }
+        
+        return JSON.stringify(response.data);
+    }
+}
+
+// 调用 Dify API
+async function callDifyAPI(data, config) {
+    if (!config.apiKey) {
+        throw new Error('请先配置 Dify API Key');
+    }
+    
+    const headers = {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream'
+    };
+    
+    const bodyObj = {
+        inputs: {},
+        query: data.text,
+        response_mode: "streaming",
+        conversation_id: "",
+        user: "user-" + Date.now(),
+        files: []
+    };
+    
+    // 使用流式处理
+    return new Promise((resolve, reject) => {
+        const http = require('http');
+        const url = require('url');
+        
+        const parsedUrl = url.parse(config.url);
+        
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 80,
+            path: parsedUrl.path,
+            method: 'POST',
+            headers: headers
+        };
+        
+        let fullResponse = '';
+        
+        const req = http.request(options, (res) => {
+            res.setEncoding('utf8');
+            
+            let buffer = '';
+            
+            res.on('data', (chunk) => {
+                buffer += chunk;
+                
+                // 处理可能的多行数据
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // 保留未完成的行
+                
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.event === 'message' && data.answer) {
+                                fullResponse += data.answer;
+                                // 发送增量更新到结果窗口
+                                if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                                    global.currentResultWindow.webContents.send('update-result', {
+                                        text: fullResponse,
+                                        incremental: data.answer,
+                                        streaming: true
+                                    });
+                                }
+                            } else if (data.event === 'message_end') {
+                                // 流结束
+                                resolve(fullResponse || '处理完成');
+                            }
+                        } catch (e) {
+                            console.error('解析SSE数据错误:', e, line);
+                        }
+                    }
+                }
+            });
+            
+            res.on('end', () => {
+                if (!fullResponse) {
+                    resolve('未收到有效响应');
+                } else {
+                    resolve(fullResponse);
+                }
+            });
+            
+            res.on('error', (e) => {
+                reject(new Error('API请求失败: ' + e.message));
+            });
+        });
+        
+        req.on('error', (e) => {
+            reject(new Error('网络请求失败: ' + e.message));
+        });
+        
+        req.write(JSON.stringify(bodyObj));
+        req.end();
+    });
 }
 
 // 显示结果窗口
@@ -349,6 +537,9 @@ function showResultWindow(action, text, result) {
         icon: path.join(__dirname, 'assets', 'icon.png')
     });
 
+    // 保存当前结果窗口的引用，用于流式更新
+    global.currentResultWindow = resultWindow;
+
     resultWindow.loadFile('result.html');
     
     resultWindow.webContents.on('did-finish-load', () => {
@@ -357,6 +548,10 @@ function showResultWindow(action, text, result) {
             text, 
             result 
         });
+    });
+    
+    resultWindow.on('closed', () => {
+        global.currentResultWindow = null;
     });
 }
 

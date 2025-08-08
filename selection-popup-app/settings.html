@@ -377,6 +377,7 @@
                     <div class="tab active" data-provider="openai">OpenAI</div>
                     <div class="tab" data-provider="azure">Azure OpenAI</div>
                     <div class="tab" data-provider="custom">自定义API</div>
+                    <div class="tab" data-provider="dify">Dify API</div>
                 </div>
 
                 <!-- OpenAI设置 -->
@@ -436,6 +437,26 @@
                     <div class="form-group">
                         <label>请求体模板</label>
                         <textarea id="custom-bodyTemplate" placeholder='{"prompt": "{text}", "max_tokens": 1000}'></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="custom-streaming"> 启用流式响应
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Dify API设置 -->
+                <div class="api-config" id="dify-config" style="display: none;">
+                    <div class="form-group">
+                        <label>API地址 *</label>
+                        <input type="text" id="dify-url" value="http://aifoundry.unisoc.com:8099/v1/chat-messages">
+                    </div>
+                    <div class="form-group">
+                        <label>API Key *</label>
+                        <input type="password" id="dify-apiKey" placeholder="Bearer {api_key}">
+                    </div>
+                    <div class="alert alert-info">
+                        Dify API 自动启用流式响应，实时显示AI回复内容。
                     </div>
                 </div>
 

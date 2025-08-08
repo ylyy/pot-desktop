@@ -73,7 +73,7 @@ class ConfigStore {
             
             // API配置
             api: {
-                provider: 'openai', // openai, azure, custom
+                provider: 'openai', // openai, azure, custom, dify
                 openai: {
                     apiKey: '',
                     apiUrl: 'https://api.openai.com/v1',
@@ -91,7 +91,13 @@ class ConfigStore {
                     url: '',
                     headers: {},
                     method: 'POST',
-                    bodyTemplate: '{}'
+                    bodyTemplate: '{}',
+                    streaming: false
+                },
+                dify: {
+                    url: 'http://aifoundry.unisoc.com:8099/v1/chat-messages',
+                    apiKey: '',
+                    streaming: true
                 }
             },
             

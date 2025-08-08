@@ -158,7 +158,10 @@ function initAPITabs() {
             document.querySelectorAll('.api-config').forEach(config => {
                 config.style.display = 'none';
             });
-            document.getElementById(`${provider}-config`).style.display = 'block';
+            const configElement = document.getElementById(`${provider}-config`);
+            if (configElement) {
+                configElement.style.display = 'block';
+            }
         });
     });
 }
@@ -184,6 +187,13 @@ async function loadAPISettings() {
     document.getElementById('custom-url').value = api.custom.url || '';
     document.getElementById('custom-headers').value = JSON.stringify(api.custom.headers || {}, null, 2);
     document.getElementById('custom-bodyTemplate').value = api.custom.bodyTemplate || '';
+    document.getElementById('custom-streaming').checked = api.custom.streaming || false;
+    
+    // Dify API设置
+    if (api.dify) {
+        document.getElementById('dify-url').value = api.dify.url || 'http://aifoundry.unisoc.com:8099/v1/chat-messages';
+        document.getElementById('dify-apiKey').value = api.dify.apiKey || '';
+    }
     
     // 设置当前提供商
     const currentProvider = api.provider || 'openai';
@@ -209,7 +219,13 @@ async function saveAPISettings() {
         custom: {
             url: document.getElementById('custom-url').value,
             headers: JSON.parse(document.getElementById('custom-headers').value || '{}'),
-            bodyTemplate: document.getElementById('custom-bodyTemplate').value
+            bodyTemplate: document.getElementById('custom-bodyTemplate').value,
+            streaming: document.getElementById('custom-streaming').checked
+        },
+        dify: {
+            url: document.getElementById('dify-url').value,
+            apiKey: document.getElementById('dify-apiKey').value,
+            streaming: true
         }
     };
     

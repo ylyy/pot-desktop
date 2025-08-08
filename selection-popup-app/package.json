@@ -1,6 +1,6 @@
 {
   "name": "ai-selection-assistant",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "AI划词助手 - 全局划词AI工具，支持自定义按钮和API",
   "main": "main-enhanced.js",
   "scripts": {

@@ -7,5 +7,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('show-result', (event, data) => {
             callback(data);
         });
+    },
+    
+    // 接收流式更新的事件
+    onUpdateResult: (callback) => {
+        ipcRenderer.on('update-result', (event, data) => {
+            callback(data);
+        });
     }
 });

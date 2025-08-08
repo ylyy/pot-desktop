@@ -158,19 +158,41 @@
                 ? data.text.substring(0, 200) + '...' 
                 : data.text;
             
-            // 隐藏加载动画，显示结果
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('resultContent').style.display = 'block';
-            
+            // 如果没有结果，保持加载状态（等待流式数据）
             if (data.result) {
+                // 非流式结果
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('resultContent').style.display = 'block';
                 currentResult = data.result;
                 document.getElementById('resultContent').textContent = data.result;
             } else if (data.error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('resultContent').style.display = 'block';
                 document.getElementById('resultContent').innerHTML = `
                     <div class="error">
                         <strong>错误：</strong>${data.error}
                     </div>
                 `;
+            }
+            // 否则保持加载状态，等待流式更新
+        });
+        
+        // 接收流式更新
+        window.electronAPI.onUpdateResult((data) => {
+            // 隐藏加载动画（如果还在显示）
+            if (document.getElementById('loading').style.display !== 'none') {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('resultContent').style.display = 'block';
+            }
+            
+            if (data.streaming) {
+                // 流式更新
+                currentResult = data.text;
+                document.getElementById('resultContent').textContent = data.text;
+                
+                // 自动滚动到底部
+                const resultArea = document.querySelector('.result-area');
+                resultArea.scrollTop = resultArea.scrollHeight;
             }
         });
 
