@@ -1,8 +1,8 @@
 {
   "name": "ai-selection-assistant",
-  "version": "1.0.0",
-  "description": "AI划词助手 - 类似豆包的文本选择AI工具",
-  "main": "main.js",
+  "version": "2.0.0",
+  "description": "AI划词助手 - 全局划词AI工具，支持自定义按钮和API",
+  "main": "main-enhanced.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder",
@@ -11,12 +11,21 @@
     "dist:win64": "electron-builder --win --x64",
     "postinstall": "electron-builder install-app-deps"
   },
-  "keywords": ["ai", "selection", "assistant", "electron"],
+  "keywords": [
+    "ai",
+    "selection",
+    "assistant",
+    "electron",
+    "global"
+  ],
   "author": "AI Assistant",
   "license": "MIT",
   "devDependencies": {
     "electron": "^27.0.0",
     "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "axios": "^1.11.0"
   },
   "build": {
     "appId": "com.aiassistant.selection",
@@ -30,7 +39,9 @@
       "!*.code-workspace",
       "!.gitignore",
       "!README.md",
-      "!dist"
+      "!dist",
+      "!*.7z",
+      "!*.tar.gz"
     ],
     "win": {
       "target": [
@@ -53,7 +64,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "AI划词助手",
       "allowToChangeInstallationDirectory": true,
-      "language": "2052"
+      "language": "2052",
+      "runAfterFinish": true
     }
   }
 }

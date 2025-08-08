@@ -1,0 +1,479 @@
+const { 
+    app, 
+    BrowserWindow, 
+    ipcMain, 
+    Menu, 
+    Tray, 
+    globalShortcut,
+    clipboard,
+    screen,
+    shell,
+    nativeImage
+} = require('electron');
+const path = require('path');
+const ConfigStore = require('./config-store');
+const axios = require('axios');
+
+// 全局变量
+let mainWindow;
+let tray;
+let floatingWindow;
+let configStore;
+let clipboardWatcher;
+let lastClipboard = '';
+
+// 应用初始化
+app.whenReady().then(() => {
+    // 初始化配置存储
+    configStore = new ConfigStore();
+    
+    // 创建窗口
+    createMainWindow();
+    createFloatingWindow();
+    createTray();
+    
+    // 注册IPC处理器
+    registerIPCHandlers();
+    
+    // 根据配置启动功能
+    const config = configStore.get('general');
+    if (config.enableClipboardWatch) {
+        startClipboardWatcher();
+    }
+    
+    // 注册全局快捷键
+    registerGlobalShortcut(config.shortcut || 'CommandOrControl+Q');
+    
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createMainWindow();
+        }
+    });
+});
+
+// 创建主窗口（设置页面）
+function createMainWindow() {
+    mainWindow = new BrowserWindow({
+        width: 900,
+        height: 700,
+        show: false,
+        webPreferences: {
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload-settings.js')
+        },
+        icon: path.join(__dirname, 'assets', 'icon.png')
+    });
+
+    mainWindow.loadFile('settings.html');
+
+    mainWindow.on('close', (e) => {
+        e.preventDefault();
+        mainWindow.hide();
+    });
+}
+
+// 创建悬浮窗口
+function createFloatingWindow() {
+    floatingWindow = new BrowserWindow({
+        width: 400,
+        height: 70,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        show: false,
+        webPreferences: {
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload-floating.js')
+        }
+    });
+
+    floatingWindow.loadFile('floating.html');
+    
+    floatingWindow.on('close', (e) => {
+        e.preventDefault();
+        floatingWindow.hide();
+    });
+
+    // 失去焦点时隐藏
+    floatingWindow.on('blur', () => {
+        setTimeout(() => {
+            if (floatingWindow && !floatingWindow.isDestroyed()) {
+                floatingWindow.hide();
+            }
+        }, 200);
+    });
+}
+
+// 创建系统托盘
+function createTray() {
+    const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
+    
+    // 如果图标不存在，创建一个简单的图标
+    let trayIcon;
+    try {
+        trayIcon = nativeImage.createFromPath(iconPath);
+    } catch (e) {
+        // 创建一个16x16的占位图标
+        trayIcon = nativeImage.createEmpty();
+    }
+    
+    tray = new Tray(trayIcon);
+    
+    const contextMenu = Menu.buildFromTemplate([
+        {
+            label: '设置',
+            click: () => {
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        },
+        {
+            label: '划词功能',
+            type: 'checkbox',
+            checked: configStore.get('general.enableClipboardWatch'),
+            click: (menuItem) => {
+                configStore.set('general.enableClipboardWatch', menuItem.checked);
+                if (menuItem.checked) {
+                    startClipboardWatcher();
+                } else {
+                    stopClipboardWatcher();
+                }
+            }
+        },
+        { type: 'separator' },
+        {
+            label: '重新加载',
+            click: () => {
+                app.relaunch();
+                app.exit();
+            }
+        },
+        {
+            label: '退出',
+            click: () => {
+                app.isQuiting = true;
+                app.quit();
+            }
+        }
+    ]);
+
+    tray.setToolTip('AI划词助手');
+    tray.setContextMenu(contextMenu);
+}
+
+// 注册IPC处理器
+function registerIPCHandlers() {
+    // 配置相关
+    ipcMain.handle('get-config', () => {
+        return configStore.data;
+    });
+
+    ipcMain.handle('set-config', (event, key, value) => {
+        return configStore.set(key, value);
+    });
+
+    ipcMain.handle('get-buttons', () => {
+        return configStore.getButtons();
+    });
+
+    ipcMain.handle('add-button', (event, button) => {
+        return configStore.addButton(button);
+    });
+
+    ipcMain.handle('update-button', (event, id, updates) => {
+        return configStore.updateButton(id, updates);
+    });
+
+    ipcMain.handle('delete-button', (event, id) => {
+        return configStore.deleteButton(id);
+    });
+
+    // AI功能处理
+    ipcMain.handle('perform-ai-action', async (event, data) => {
+        try {
+            const result = await callAIAPI(data);
+            
+            // 显示结果窗口
+            showResultWindow(data.buttonName || data.action, data.text, result);
+            
+            // 隐藏悬浮窗口
+            if (floatingWindow) {
+                floatingWindow.hide();
+            }
+            
+            return { success: true, result };
+        } catch (error) {
+            console.error('AI API调用失败:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    // 测试API连接
+    ipcMain.handle('test-api', async () => {
+        try {
+            const result = await callAIAPI({
+                text: 'Hello',
+                prompt: '请回复"API连接正常"'
+            });
+            return { success: true, result };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    // 打开外部链接
+    ipcMain.handle('open-external', (event, url) => {
+        shell.openExternal(url);
+    });
+}
+
+// 调用AI API
+async function callAIAPI(data) {
+    const apiConfig = configStore.get('api');
+    const provider = apiConfig.provider;
+    
+    switch (provider) {
+        case 'openai':
+            return await callOpenAI(data, apiConfig.openai);
+        case 'azure':
+            return await callAzureOpenAI(data, apiConfig.azure);
+        case 'custom':
+            return await callCustomAPI(data, apiConfig.custom);
+        default:
+            throw new Error('未配置API提供商');
+    }
+}
+
+// 调用OpenAI API
+async function callOpenAI(data, config) {
+    if (!config.apiKey) {
+        throw new Error('请先配置OpenAI API Key');
+    }
+    
+    const response = await axios.post(
+        `${config.apiUrl}/chat/completions`,
+        {
+            model: config.model,
+            messages: [
+                {
+                    role: 'user',
+                    content: data.prompt || data.text
+                }
+            ],
+            temperature: config.temperature,
+            max_tokens: config.maxTokens
+        },
+        {
+            headers: {
+                'Authorization': `Bearer ${config.apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+    
+    return response.data.choices[0].message.content;
+}
+
+// 调用Azure OpenAI API
+async function callAzureOpenAI(data, config) {
+    if (!config.apiKey || !config.endpoint || !config.deploymentName) {
+        throw new Error('请先配置Azure OpenAI参数');
+    }
+    
+    const response = await axios.post(
+        `${config.endpoint}/openai/deployments/${config.deploymentName}/chat/completions?api-version=${config.apiVersion || '2023-05-15'}`,
+        {
+            messages: [
+                {
+                    role: 'user',
+                    content: data.prompt || data.text
+                }
+            ]
+        },
+        {
+            headers: {
+                'api-key': config.apiKey,
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+    
+    return response.data.choices[0].message.content;
+}
+
+// 调用自定义API
+async function callCustomAPI(data, config) {
+    if (!config.url) {
+        throw new Error('请先配置自定义API地址');
+    }
+    
+    // 替换模板中的占位符
+    let body = config.bodyTemplate || '{}';
+    body = body.replace('{text}', data.text);
+    body = body.replace('{prompt}', data.prompt || data.text);
+    
+    const response = await axios({
+        method: config.method || 'POST',
+        url: config.url,
+        headers: config.headers || {},
+        data: JSON.parse(body)
+    });
+    
+    // 尝试从响应中提取结果
+    if (typeof response.data === 'string') {
+        return response.data;
+    } else if (response.data.result) {
+        return response.data.result;
+    } else if (response.data.data) {
+        return response.data.data;
+    } else if (response.data.choices && response.data.choices[0]) {
+        return response.data.choices[0].message?.content || response.data.choices[0].text;
+    }
+    
+    return JSON.stringify(response.data);
+}
+
+// 显示结果窗口
+function showResultWindow(action, text, result) {
+    const resultWindow = new BrowserWindow({
+        width: 600,
+        height: 500,
+        frame: true,
+        alwaysOnTop: true,
+        webPreferences: {
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload-result.js')
+        },
+        icon: path.join(__dirname, 'assets', 'icon.png')
+    });
+
+    resultWindow.loadFile('result.html');
+    
+    resultWindow.webContents.on('did-finish-load', () => {
+        resultWindow.webContents.send('show-result', { 
+            action, 
+            text, 
+            result 
+        });
+    });
+}
+
+// 显示悬浮窗口
+function showFloatingWindow(position, text) {
+    if (!floatingWindow || text.length > configStore.get('general.maxTextLength')) {
+        return;
+    }
+
+    const display = screen.getDisplayNearestPoint(position);
+    const { width, height } = display.workAreaSize;
+    const windowBounds = floatingWindow.getBounds();
+
+    let x = position.x - windowBounds.width / 2;
+    let y = position.y + 20;
+
+    // 边界检查
+    if (x < display.bounds.x) x = display.bounds.x;
+    if (x + windowBounds.width > display.bounds.x + width) {
+        x = display.bounds.x + width - windowBounds.width;
+    }
+    if (y + windowBounds.height > display.bounds.y + height) {
+        y = position.y - windowBounds.height - 20;
+    }
+
+    floatingWindow.setPosition(Math.round(x), Math.round(y));
+    floatingWindow.webContents.send('show-text', text);
+    floatingWindow.showInactive();
+}
+
+// 开始剪贴板监听
+function startClipboardWatcher() {
+    const interval = configStore.get('general.clipboardWatchInterval') || 500;
+    
+    clipboardWatcher = setInterval(() => {
+        const currentClipboard = clipboard.readText();
+        
+        if (currentClipboard && currentClipboard !== lastClipboard && currentClipboard.trim().length > 0) {
+            lastClipboard = currentClipboard;
+            const mousePos = screen.getCursorScreenPoint();
+            showFloatingWindow(mousePos, currentClipboard);
+        }
+    }, interval);
+}
+
+// 停止剪贴板监听
+function stopClipboardWatcher() {
+    if (clipboardWatcher) {
+        clearInterval(clipboardWatcher);
+        clipboardWatcher = null;
+    }
+}
+
+// 注册全局快捷键
+function registerGlobalShortcut(shortcut) {
+    globalShortcut.unregisterAll();
+    
+    if (shortcut) {
+        globalShortcut.register(shortcut, () => {
+            // 保存当前剪贴板
+            const oldClipboard = clipboard.readText();
+            
+            // 模拟复制
+            if (process.platform === 'darwin') {
+                // macOS: 使用 AppleScript
+                const { execSync } = require('child_process');
+                execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
+            } else {
+                // Windows/Linux: 需要 robotjs
+                try {
+                    const robot = require('robotjs');
+                    robot.keyTap('c', 'control');
+                } catch (e) {
+                    console.error('需要安装 robotjs 模块');
+                }
+            }
+            
+            // 等待复制完成
+            setTimeout(() => {
+                const selectedText = clipboard.readText();
+                
+                if (selectedText && selectedText !== oldClipboard) {
+                    const mousePos = screen.getCursorScreenPoint();
+                    showFloatingWindow(mousePos, selectedText);
+                    
+                    // 恢复剪贴板
+                    setTimeout(() => {
+                        clipboard.writeText(oldClipboard);
+                    }, 100);
+                }
+            }, 50);
+        });
+    }
+}
+
+// 应用退出前清理
+app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    if (clipboardWatcher) {
+        clearInterval(clipboardWatcher);
+    }
+});
+
+app.on('window-all-closed', () => {
+    // 不退出应用，保持在系统托盘
+});
+
+// 防止多开
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+        }
+    });
+}

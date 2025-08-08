@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI划词助手 - 设置</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 200px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px 0;
+        }
+
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item:hover {
+            background: #f5f5f5;
+        }
+
+        .nav-item.active {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-right: 3px solid #1976d2;
+        }
+
+        /* 主内容区 */
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            color: #1976d2;
+        }
+
+        /* 表单样式 */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #1976d2;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* 按钮样式 */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 10px;
+        }
+
+        .btn-primary {
+            background: #1976d2;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1565c0;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+
+        /* 按钮列表 */
+        .button-list {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .button-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+
+        .button-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .button-icon {
+            font-size: 24px;
+            margin-right: 15px;
+        }
+
+        .button-info {
+            flex: 1;
+        }
+
+        .button-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .button-prompt {
+            color: #666;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .button-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* 开关 */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #1976d2;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        /* 标签页 */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: #f5f5f5;
+        }
+
+        .tab.active {
+            color: #1976d2;
+            border-bottom-color: #1976d2;
+        }
+
+        /* 对话框 */
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .dialog {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            width: 500px;
+            max-width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .dialog-header {
+            margin-bottom: 20px;
+        }
+
+        .dialog-footer {
+            margin-top: 20px;
+            text-align: right;
+        }
+
+        /* 提示信息 */
+        .alert {
+            padding: 12px 20px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .alert-info {
+            background: #e3f2fd;
+            color: #1565c0;
+            border: 1px solid #90caf9;
+        }
+
+        .alert-success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #81c784;
+        }
+
+        .alert-warning {
+            background: #fff3e0;
+            color: #ef6c00;
+            border: 1px solid #ffb74d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="nav-item active" data-section="buttons">
+                <span>🎯</span>
+                <span>功能按钮</span>
+            </div>
+            <div class="nav-item" data-section="api">
+                <span>🔑</span>
+                <span>API设置</span>
+            </div>
+            <div class="nav-item" data-section="general">
+                <span>⚙️</span>
+                <span>通用设置</span>
+            </div>
+            <div class="nav-item" data-section="about">
+                <span>ℹ️</span>
+                <span>关于</span>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="content">
+            <!-- 功能按钮设置 -->
+            <section class="section active" id="buttons">
+                <h2>功能按钮设置</h2>
+                
+                <div class="alert alert-info">
+                    您可以自定义AI功能按钮，包括名称、图标和提示词。
+                </div>
+
+                <div class="button-list" id="buttonList">
+                    <!-- 按钮列表将在这里动态生成 -->
+                </div>
+
+                <button class="btn btn-primary" onclick="showAddButtonDialog()">
+                    + 添加新按钮
+                </button>
+            </section>
+
+            <!-- API设置 -->
+            <section class="section" id="api">
+                <h2>API设置</h2>
+
+                <div class="tabs">
+                    <div class="tab active" data-provider="openai">OpenAI</div>
+                    <div class="tab" data-provider="azure">Azure OpenAI</div>
+                    <div class="tab" data-provider="custom">自定义API</div>
+                </div>
+
+                <!-- OpenAI设置 -->
+                <div class="api-config" id="openai-config">
+                    <div class="form-group">
+                        <label>API Key *</label>
+                        <input type="password" id="openai-apiKey" placeholder="sk-...">
+                    </div>
+                    <div class="form-group">
+                        <label>API地址</label>
+                        <input type="text" id="openai-apiUrl" value="https://api.openai.com/v1">
+                    </div>
+                    <div class="form-group">
+                        <label>模型</label>
+                        <select id="openai-model">
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="gpt-4">GPT-4</option>
+                            <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Temperature (0-2)</label>
+                        <input type="number" id="openai-temperature" min="0" max="2" step="0.1" value="0.7">
+                    </div>
+                    <div class="form-group">
+                        <label>最大Token数</label>
+                        <input type="number" id="openai-maxTokens" min="100" max="4000" value="2000">
+                    </div>
+                </div>
+
+                <!-- Azure设置 -->
+                <div class="api-config" id="azure-config" style="display: none;">
+                    <div class="form-group">
+                        <label>API Key *</label>
+                        <input type="password" id="azure-apiKey">
+                    </div>
+                    <div class="form-group">
+                        <label>终结点 *</label>
+                        <input type="text" id="azure-endpoint" placeholder="https://your-resource.openai.azure.com/">
+                    </div>
+                    <div class="form-group">
+                        <label>部署名称 *</label>
+                        <input type="text" id="azure-deploymentName">
+                    </div>
+                </div>
+
+                <!-- 自定义API设置 -->
+                <div class="api-config" id="custom-config" style="display: none;">
+                    <div class="form-group">
+                        <label>API地址 *</label>
+                        <input type="text" id="custom-url" placeholder="https://api.example.com/chat">
+                    </div>
+                    <div class="form-group">
+                        <label>请求头 (JSON格式)</label>
+                        <textarea id="custom-headers" placeholder='{"Authorization": "Bearer YOUR_TOKEN"}'></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>请求体模板</label>
+                        <textarea id="custom-bodyTemplate" placeholder='{"prompt": "{text}", "max_tokens": 1000}'></textarea>
+                    </div>
+                </div>
+
+                <div style="margin-top: 30px;">
+                    <button class="btn btn-primary" onclick="saveAPISettings()">保存设置</button>
+                    <button class="btn btn-secondary" onclick="testAPI()">测试连接</button>
+                </div>
+            </section>
+
+            <!-- 通用设置 -->
+            <section class="section" id="general">
+                <h2>通用设置</h2>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="autoStart"> 开机自动启动
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label>全局快捷键</label>
+                    <input type="text" id="shortcut" value="Ctrl+Q" readonly>
+                    <small style="color: #666;">点击输入框后按下想要的快捷键组合</small>
+                </div>
+
+                <div class="form-group">
+                    <label>主题</label>
+                    <select id="theme">
+                        <option value="light">浅色</option>
+                        <option value="dark">深色</option>
+                        <option value="auto">跟随系统</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>最大文本长度</label>
+                    <input type="number" id="maxTextLength" min="100" max="10000" value="5000">
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="enableClipboardWatch"> 启用剪贴板监听
+                    </label>
+                    <small style="color: #666;">自动检测复制的文本（可能影响性能）</small>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveGeneralSettings()">保存设置</button>
+            </section>
+
+            <!-- 关于 -->
+            <section class="section" id="about">
+                <h2>关于 AI划词助手</h2>
+                
+                <div style="text-align: center; padding: 40px;">
+                    <div style="font-size: 48px; margin-bottom: 20px;">🤖</div>
+                    <h3>AI划词助手 v1.0.0</h3>
+                    <p style="color: #666; margin: 20px 0;">
+                        一个强大的划词翻译和AI处理工具<br>
+                        支持在任何应用中使用
+                    </p>
+                    
+                    <div style="margin-top: 40px;">
+                        <button class="btn btn-secondary" onclick="checkUpdate()">检查更新</button>
+                        <button class="btn btn-secondary" onclick="openGithub()">GitHub</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- 添加/编辑按钮对话框 -->
+    <div class="dialog-overlay" id="buttonDialog">
+        <div class="dialog">
+            <div class="dialog-header">
+                <h3 id="dialogTitle">添加新按钮</h3>
+            </div>
+            
+            <div class="form-group">
+                <label>按钮名称 *</label>
+                <input type="text" id="buttonName" placeholder="例如：代码解释">
+            </div>
+            
+            <div class="form-group">
+                <label>图标</label>
+                <input type="text" id="buttonIcon" placeholder="输入emoji表情，如：💻">
+            </div>
+            
+            <div class="form-group">
+                <label>提示词模板 *</label>
+                <textarea id="buttonPrompt" rows="5" placeholder="请解释以下代码的功能：&#10;&#10;{text}"></textarea>
+                <small style="color: #666;">使用 {text} 作为选中文本的占位符</small>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="buttonEnabled" checked> 启用此按钮
+                </label>
+            </div>
+            
+            <div class="dialog-footer">
+                <button class="btn btn-secondary" onclick="closeButtonDialog()">取消</button>
+                <button class="btn btn-primary" onclick="saveButton()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="settings.js"></script>
+</body>
+</html>
