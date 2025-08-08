@@ -4,8 +4,14 @@ const fs = require('fs');
 
 class ConfigStore {
     constructor() {
-        const userDataPath = app.getPath('userData');
-        this.path = path.join(userDataPath, 'config.json');
+        // 确保在app准备就绪后才获取userData路径
+        try {
+            const userDataPath = app.getPath('userData');
+            this.path = path.join(userDataPath, 'config.json');
+        } catch (e) {
+            // 如果app还未准备就绪，使用临时路径
+            this.path = path.join(process.cwd(), 'config.json');
+        }
         this.data = this.loadConfig();
     }
 

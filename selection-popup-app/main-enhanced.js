@@ -452,18 +452,6 @@ function registerGlobalShortcut(shortcut) {
     }
 }
 
-// 应用退出前清理
-app.on('will-quit', () => {
-    globalShortcut.unregisterAll();
-    if (clipboardWatcher) {
-        clearInterval(clipboardWatcher);
-    }
-});
-
-app.on('window-all-closed', () => {
-    // 不退出应用，保持在系统托盘
-});
-
 // 防止多开
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -477,3 +465,18 @@ if (!gotTheLock) {
         }
     });
 }
+
+// 应用退出前清理
+app.on('will-quit', () => {
+    // 只在app ready之后才能使用globalShortcut
+    if (app.isReady()) {
+        globalShortcut.unregisterAll();
+    }
+    if (clipboardWatcher) {
+        clearInterval(clipboardWatcher);
+    }
+});
+
+app.on('window-all-closed', () => {
+    // 不退出应用，保持在系统托盘
+});
