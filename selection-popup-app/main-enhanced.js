@@ -468,9 +468,12 @@ async function callDifyAPI(data, config) {
         'Accept': 'text/event-stream'
     };
     
+    // 使用prompt（如果有）或者原始文本
+    const queryText = data.prompt || data.text;
+    
     const bodyObj = {
         inputs: {},
-        query: data.text,
+        query: queryText,
         response_mode: "streaming",
         conversation_id: "",
         user: "user-" + Date.now(),
@@ -479,14 +482,17 @@ async function callDifyAPI(data, config) {
     
     // 使用流式处理
     return new Promise((resolve, reject) => {
+        const https = require('https');
         const http = require('http');
         const url = require('url');
         
         const parsedUrl = url.parse(config.url);
+        // 自动选择 http/https 客户端
+        const protocol = parsedUrl.protocol === 'https:' ? https : http;
         
         const options = {
             hostname: parsedUrl.hostname,
-            port: parsedUrl.port || 80,
+            port: parsedUrl.port || (parsedUrl.protocol === 'https:' ? 443 : 80),
             path: parsedUrl.path,
             method: 'POST',
             headers: headers
@@ -494,7 +500,20 @@ async function callDifyAPI(data, config) {
         
         let fullResponse = '';
         
-        const req = http.request(options, (res) => {
+        const req = protocol.request(options, (res) => {
+            console.log(`Dify API 响应状态: ${res.statusCode}`);
+            
+            // 检查非 2xx 状态
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+                let errorBody = '';
+                res.on('data', chunk => errorBody += chunk);
+                res.on('end', () => {
+                    console.error('Dify API 错误响应:', errorBody);
+                    reject(new Error(`API请求失败 (${res.statusCode}): ${errorBody || res.statusMessage}`));
+                });
+                return;
+            }
+            
             res.setEncoding('utf8');
             
             let buffer = '';
@@ -502,17 +521,49 @@ async function callDifyAPI(data, config) {
             res.on('data', (chunk) => {
                 buffer += chunk;
                 
-                // 处理可能的多行数据
+                // 逐行解析
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || ''; // 保留未完成的行
                 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine) continue;
+                    
+                    if (trimmedLine.startsWith('data: ')) {
+                        const dataStr = trimmedLine.slice(6);
+                        
+                        // 处理 [DONE] 信号
+                        if (dataStr === '[DONE]') {
+                            resolve(fullResponse || '处理完成');
+                            return;
+                        }
+                        
                         try {
-                            const data = JSON.parse(line.slice(6));
-                            if (data.event === 'message' && data.answer) {
+                            const data = JSON.parse(dataStr);
+                            
+                            // 处理不同的事件类型
+                            if (data.event === 'message') {
+                                if (data.answer !== undefined) {
+                                    fullResponse += data.answer;
+                                    // 发送增量更新到结果窗口
+                                    if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                                        global.currentResultWindow.webContents.send('update-result', {
+                                            text: fullResponse,
+                                            incremental: data.answer,
+                                            streaming: true
+                                        });
+                                    }
+                                }
+                            } else if (data.event === 'message_end') {
+                                // 流结束
+                                console.log('Dify API 流式响应结束');
+                                resolve(fullResponse || '处理完成');
+                                return;
+                            }
+                            
+                            // 兼容只含 answer 的情况
+                            if (!data.event && data.answer !== undefined) {
                                 fullResponse += data.answer;
-                                // 发送增量更新到结果窗口
                                 if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
                                     global.currentResultWindow.webContents.send('update-result', {
                                         text: fullResponse,
@@ -520,18 +571,20 @@ async function callDifyAPI(data, config) {
                                         streaming: true
                                     });
                                 }
-                            } else if (data.event === 'message_end') {
-                                // 流结束
-                                resolve(fullResponse || '处理完成');
                             }
                         } catch (e) {
-                            console.error('解析SSE数据错误:', e, line);
+                            console.error('解析SSE数据错误:', e, dataStr);
                         }
                     }
                 }
             });
             
             res.on('end', () => {
+                // 处理剩余的缓冲区
+                if (buffer.trim()) {
+                    console.log('处理剩余缓冲区:', buffer);
+                }
+                
                 if (!fullResponse) {
                     resolve('未收到有效响应');
                 } else {
@@ -540,14 +593,21 @@ async function callDifyAPI(data, config) {
             });
             
             res.on('error', (e) => {
-                reject(new Error('API请求失败: ' + e.message));
+                reject(new Error('响应处理错误: ' + e.message));
             });
         });
         
         req.on('error', (e) => {
+            console.error('Dify API 请求错误:', e);
             reject(new Error('网络请求失败: ' + e.message));
         });
         
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('请求超时'));
+        });
+        
+        req.setTimeout(30000); // 30秒超时
         req.write(JSON.stringify(bodyObj));
         req.end();
     });
@@ -629,78 +689,97 @@ function startClipboardWatcher() {
 
 // 智能文本选择检测
 let lastMouseUpTime = 0;
-let lastCheckTime = 0;
 let lastSelectedText = '';
-let selectionDetectorInterval = null;
-let isDetectorRunning = false;
+let mouseUpTimer = null;
+let isDetecting = false;
 
 function startSmartSelectionDetector() {
-    if (isDetectorRunning) return;
-    
-    isDetectorRunning = true;
     console.log('启动智能划词检测...');
     
-    // 每200ms检查一次
-    selectionDetectorInterval = setInterval(() => {
-        const now = Date.now();
+    // 使用 globalShortcut 捕获鼠标释放事件的替代方案
+    // 创建一个透明的全屏窗口来捕获鼠标事件
+    const { BrowserWindow } = require('electron');
+    
+    let detectorWindow = new BrowserWindow({
+        width: 1,
+        height: 1,
+        x: -100,
+        y: -100,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false
+        }
+    });
+    
+    detectorWindow.setIgnoreMouseEvents(true);
+    detectorWindow.hide();
+    
+    // 使用定时器检测选中的文本
+    smartDetectorInterval = setInterval(() => {
+        if (isDetecting) return;
         
-        // 避免频繁检查
-        if (now - lastCheckTime < 200) return;
-        lastCheckTime = now;
+        const currentMousePos = screen.getCursorScreenPoint();
         
-        // 保存当前剪贴板内容
+        // 保存当前剪贴板
         const oldClipboard = clipboard.readText();
         
+        // 清空剪贴板
+        clipboard.clear();
+        
+        // 模拟复制
         try {
-            // 模拟复制操作来获取选中的文本
             if (process.platform === 'darwin') {
-                // macOS
                 const { execSync } = require('child_process');
                 execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
             } else {
-                // Windows/Linux
                 const robot = require('robotjs');
-                robot.keyTap('c', process.platform === 'darwin' ? 'command' : 'control');
+                robot.keyTap('c', 'control');
+            }
+        } catch (e) {
+            // 忽略错误
+        }
+        
+        // 检查剪贴板
+        setTimeout(() => {
+            const selectedText = clipboard.readText();
+            
+            // 恢复原剪贴板
+            if (oldClipboard) {
+                clipboard.writeText(oldClipboard);
             }
             
-            // 等待剪贴板更新
-            setTimeout(() => {
-                const currentText = clipboard.readText();
+            // 如果有新的选中文本
+            if (selectedText && 
+                selectedText.trim().length > 0 &&
+                selectedText !== lastSelectedText &&
+                selectedText.trim().length <= configStore.get('general.maxTextLength')) {
                 
-                // 检查是否有新的文本被选中
-                if (currentText && 
-                    currentText !== oldClipboard && 
-                    currentText !== lastSelectedText &&
-                    currentText.trim().length > 0 &&
-                    currentText.trim().length <= configStore.get('general.maxTextLength')) {
-                    
-                    console.log('检测到文本选择:', currentText.substring(0, 50) + '...');
-                    lastSelectedText = currentText;
-                    
-                    // 获取鼠标位置并显示悬浮窗
-                    const mousePos = screen.getCursorScreenPoint();
-                    showFloatingWindow(mousePos, currentText);
-                }
+                console.log('检测到文本选择:', selectedText.substring(0, 50) + '...');
+                lastSelectedText = selectedText;
                 
-                // 恢复原剪贴板内容
-                if (currentText !== oldClipboard) {
-                    setTimeout(() => {
-                        clipboard.writeText(oldClipboard);
-                    }, 50);
-                }
-            }, 100);
-            
-        } catch (e) {
-            // 忽略错误，继续运行
-        }
-    }, 200);
+                // 显示悬浮窗
+                showFloatingWindow(currentMousePos, selectedText);
+                
+                // 防止连续触发
+                isDetecting = true;
+                setTimeout(() => {
+                    isDetecting = false;
+                }, 1000);
+            }
+        }, 100);
+    }, 500); // 每500ms检查一次
 }
 
+let smartDetectorInterval = null;
+
 function stopSmartSelectionDetector() {
-    if (selectionDetectorInterval) {
-        clearInterval(selectionDetectorInterval);
-        selectionDetectorInterval = null;
-        isDetectorRunning = false;
+    if (smartDetectorInterval) {
+        clearInterval(smartDetectorInterval);
+        smartDetectorInterval = null;
         console.log('停止智能划词检测');
     }
 }
