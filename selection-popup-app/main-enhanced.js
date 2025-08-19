@@ -864,7 +864,13 @@ function startSmartSelectionDetector() {
             if (process.platform === 'darwin') {
                 const { execSync } = require('child_process');
                 execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
+            } else if (process.platform === 'win32') {
+                // 使用 PowerShell 向当前活动窗口发送 Ctrl+C
+                try {
+                    exec('powershell -NoProfile -WindowStyle Hidden -Command "$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys(\'^c\')"');
+                } catch {}
             } else {
+                // 其他平台作为兜底尝试 robotjs
                 try {
                     const robot = require('robotjs');
                     robot.keyTap('c', 'control');
