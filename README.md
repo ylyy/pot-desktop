@@ -470,3 +470,152 @@ Rust >= 1.80.0
 -   [Tauri](https://github.com/tauri-apps/tauri) 好用的 GUI 框架
 
 <div align="center">
+
+# Electron 划词AI助手实现
+
+这是一个类似豆包的划词AI助手功能实现，支持在选中文本后自动弹出AI功能按钮，无需使用快捷键。
+
+## 功能特点
+
+1. **自动弹窗**：选中文本后自动显示AI功能按钮
+2. **多种AI功能**：翻译、解释、总结、改写、语法检查
+3. **智能定位**：弹窗智能定位，不会超出屏幕边界
+4. **现代UI设计**：美观的渐变色和动画效果
+5. **支持多种文本选择方式**：鼠标选择、键盘选择
+
+## 实现原理
+
+### 1. 基础HTML实现 (`selection-popup.html`)
+- 纯网页版本，可以直接在浏览器中运行
+- 使用 `mouseup` 和 `selectionchange` 事件监听文本选择
+- 通过 `window.getSelection()` 获取选中的文本
+- 使用 `getBoundingClientRect()` 获取选中区域位置
+
+### 2. Electron 应用实现 (`selection-popup-app/`)
+完整的 Electron 桌面应用，包含：
+
+#### 主进程 (`main.js`)
+- 创建应用窗口
+- 处理 IPC 通信
+- 模拟 AI 功能处理
+
+#### 预加载脚本 (`preload.js`)
+- 安全地暴露 API 给渲染进程
+- 实现主进程和渲染进程的通信桥梁
+
+#### 渲染进程 (`index.html`)
+- 实现划词弹窗UI
+- 处理用户交互
+- 显示AI处理结果
+
+### 3. 全局选择监听 (`global-selection.js`)
+提供两种全局监听方式：
+- **剪贴板轮询**：定期检查剪贴板变化
+- **全局快捷键**：通过快捷键触发
+
+## 运行方法
+
+### 运行纯网页版本
+```bash
+# 直接在浏览器中打开
+open selection-popup.html
+```
+
+### 运行 Electron 应用
+```bash
+cd selection-popup-app
+npm install
+npm start
+```
+
+## 技术实现细节
+
+### 文本选择检测
+```javascript
+// 监听鼠标释放事件
+document.addEventListener('mouseup', handleTextSelection);
+
+// 监听选择变化事件（支持键盘选择）
+document.addEventListener('selectionchange', () => {
+    const selection = window.getSelection();
+    if (selection.toString().trim()) {
+        // 处理选中的文本
+    }
+});
+```
+
+### 弹窗定位算法
+```javascript
+function showPopup(rect) {
+    // 计算弹窗位置（在选中文本下方居中）
+    let left = rect.left + (rect.width - popupWidth) / 2;
+    let top = rect.bottom + padding;
+    
+    // 边界检查，确保不超出视窗
+    if (left < 10) left = 10;
+    if (top + popupHeight > viewportHeight) {
+        // 显示在上方
+        top = rect.top - popupHeight - padding;
+    }
+}
+```
+
+### IPC 通信
+```javascript
+// 渲染进程发送请求
+const response = await window.electronAPI.performAIAction({
+    action: 'translate',
+    text: selectedText
+});
+
+// 主进程处理请求
+ipcMain.handle('perform-ai-action', async (event, data) => {
+    // 调用 AI API
+    return { success: true, result: '翻译结果' };
+});
+```
+
+## 与其他应用的区别
+
+### 与传统快捷键方式的区别
+- **传统方式**：需要记住并按下快捷键
+- **本实现**：选中即显示，更直观
+
+### 与豆包等应用的相似性
+- 自动检测文本选择
+- 悬浮按钮设计
+- 多功能集成
+- 流畅的动画效果
+
+## 扩展建议
+
+1. **集成真实AI API**
+   - OpenAI API
+   - 百度翻译 API
+   - 讯飞语音 API
+
+2. **增强功能**
+   - 历史记录
+   - 自定义功能按钮
+   - 快捷键配置
+
+3. **优化体验**
+   - 添加语音播放
+   - 支持图片OCR
+   - 离线功能
+
+## 注意事项
+
+1. **Electron 完全支持**此类功能，不存在技术限制
+2. 全局监听需要相应的系统权限
+3. 不同操作系统可能需要不同的实现策略
+
+## 结论
+
+Electron 完全可以实现类似豆包的划词AI助手功能。本示例展示了：
+- 自动弹窗的实现方法
+- 无需快捷键的交互方式
+- 现代化的UI设计
+- 完整的前后端通信
+
+这种实现方式用户体验更好，操作更直观，完全可以达到商业应用的水平。

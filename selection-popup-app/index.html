@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI划词助手 - Electron应用</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* 头部样式 */
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+
+        .header p {
+            margin-top: 8px;
+            opacity: 0.9;
+        }
+
+        /* 主内容区域 */
+        .container {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .content-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .content-card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 22px;
+        }
+
+        .content-card p {
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        /* AI弹窗样式 - 更现代的设计 */
+        .ai-popup {
+            position: absolute;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            padding: 4px;
+            display: none;
+            z-index: 10000;
+            animation: popIn 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            border: 1px solid rgba(0,0,0,0.08);
+        }
+
+        @keyframes popIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* AI功能按钮容器 */
+        .ai-buttons {
+            display: flex;
+            gap: 2px;
+            flex-wrap: wrap;
+            max-width: 360px;
+            padding: 4px;
+        }
+
+        /* 单个AI功能按钮 - 现代风格 */
+        .ai-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: none;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            white-space: nowrap;
+            color: #333;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ai-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, transparent, rgba(255,255,255,0.4));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .ai-button:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+
+        .ai-button:hover::before {
+            opacity: 1;
+        }
+
+        .ai-button:active {
+            transform: translateY(0);
+            background: #dee2e6;
+        }
+
+        /* 图标样式 */
+        .ai-button .icon {
+            font-size: 18px;
+            width: 20px;
+            height: 20px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 不同功能的渐变背景 */
+        .ai-button.translate:hover {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .ai-button.explain:hover {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+
+        .ai-button.summarize:hover {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+
+        .ai-button.rewrite:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .ai-button.grammar:hover {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        /* 三角形指示器 */
+        .ai-popup::before {
+            content: '';
+            position: absolute;
+            top: -7px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-bottom: 7px solid white;
+            filter: drop-shadow(0 -2px 2px rgba(0,0,0,0.08));
+        }
+
+        /* 结果显示区域 */
+        .result-area {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            max-height: 300px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            padding: 20px;
+            display: none;
+            animation: slideIn 0.3s ease-out;
+            overflow-y: auto;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .result-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .close-btn:hover {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .result-content {
+            color: #555;
+            line-height: 1.6;
+        }
+
+        .result-original {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 示例文本样式 */
+        .example-text {
+            background: #fafafa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .highlight {
+            background: linear-gradient(to bottom, transparent 60%, #ffd93d 60%);
+            padding: 0 2px;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🤖 AI划词助手</h1>
+        <p>选中任意文本，即可使用AI功能 - 无需快捷键</p>
+    </div>
+
+    <div class="container">
+        <div class="content-card">
+            <h2>📝 使用说明</h2>
+            <p>这是一个现代化的AI划词助手应用，类似豆包的交互体验。只需<span class="highlight">选中文本</span>，即可看到AI功能按钮。</p>
+            <p>支持的功能包括：翻译、解释、总结、改写、语法检查等。</p>
+        </div>
+
+        <div class="content-card">
+            <h2>🌍 English Example</h2>
+            <div class="example-text">
+                <p>Electron is a framework for creating native applications with web technologies like JavaScript, HTML, and CSS. It takes care of the hard parts so you can focus on the core of your application.</p>
+                <p>Under the hood, Electron combines Chromium and Node.js into a single runtime and apps can be packaged for Mac, Windows, and Linux.</p>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <h2>🇨🇳 中文示例</h2>
+            <div class="example-text">
+                <p>人工智能（Artificial Intelligence，简称AI）是计算机科学的一个分支，它企图了解智能的实质，并生产出一种新的能以人类智能相似的方式做出反应的智能机器。</p>
+                <p>该领域的研究包括机器人、语言识别、图像识别、自然语言处理和专家系统等。人工智能从诞生以来，理论和技术日益成熟，应用领域也不断扩大。</p>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <h2>💻 代码示例</h2>
+            <div class="example-text">
+                <pre><code>function quickSort(arr) {
+    if (arr.length <= 1) return arr;
+    const pivot = arr[Math.floor(arr.length / 2)];
+    const left = arr.filter(x => x < pivot);
+    const right = arr.filter(x => x > pivot);
+    return [...quickSort(left), pivot, ...quickSort(right)];
+}</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI功能弹窗 -->
+    <div class="ai-popup" id="aiPopup">
+        <div class="ai-buttons">
+            <button class="ai-button translate" data-action="translate">
+                <span class="icon">🌐</span>
+                <span>翻译</span>
+            </button>
+            <button class="ai-button explain" data-action="explain">
+                <span class="icon">💡</span>
+                <span>解释</span>
+            </button>
+            <button class="ai-button summarize" data-action="summarize">
+                <span class="icon">📝</span>
+                <span>总结</span>
+            </button>
+            <button class="ai-button rewrite" data-action="rewrite">
+                <span class="icon">✏️</span>
+                <span>改写</span>
+            </button>
+            <button class="ai-button grammar" data-action="grammar">
+                <span class="icon">✔️</span>
+                <span>纠错</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 结果显示区域 -->
+    <div class="result-area" id="resultArea">
+        <div class="result-header">
+            <span class="result-title" id="resultTitle">AI处理结果</span>
+            <button class="close-btn" id="closeResult">×</button>
+        </div>
+        <div class="result-content" id="resultContent">
+            <div class="loading"></div> 处理中...
+        </div>
+    </div>
+
+    <script>
+        // 获取元素
+        const aiPopup = document.getElementById('aiPopup');
+        const resultArea = document.getElementById('resultArea');
+        const resultTitle = document.getElementById('resultTitle');
+        const resultContent = document.getElementById('resultContent');
+        const closeResult = document.getElementById('closeResult');
+        
+        let selectedText = '';
+        let selectionTimeout = null;
+
+        // 监听文本选中事件
+        document.addEventListener('mouseup', handleTextSelection);
+        document.addEventListener('selectionchange', () => {
+            // 处理通过键盘选中的情况
+            if (selectionTimeout) {
+                clearTimeout(selectionTimeout);
+            }
+            selectionTimeout = setTimeout(() => {
+                const selection = window.getSelection();
+                if (selection.toString().trim() && !aiPopup.contains(document.activeElement)) {
+                    handleTextSelection({ target: document.activeElement });
+                }
+            }, 200);
+        });
+
+        function handleTextSelection(e) {
+            // 清除之前的定时器
+            if (selectionTimeout) {
+                clearTimeout(selectionTimeout);
+            }
+
+            // 延迟处理，确保选中操作完成
+            selectionTimeout = setTimeout(() => {
+                const selection = window.getSelection();
+                const text = selection.toString().trim();
+
+                // 如果没有选中文本，隐藏弹窗
+                if (!text) {
+                    hidePopup();
+                    return;
+                }
+
+                // 如果点击的是弹窗内部或结果区域，不处理
+                if (aiPopup.contains(e.target) || resultArea.contains(e.target)) {
+                    return;
+                }
+
+                // 保存选中的文本
+                selectedText = text;
+
+                // 获取选中区域的位置信息
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+
+                // 显示弹窗
+                showPopup(rect);
+            }, 10);
+        }
+
+        function showPopup(rect) {
+            // 计算弹窗位置
+            const popupWidth = 360;
+            const popupHeight = 60;
+            const padding = 10;
+
+            let left = rect.left + (rect.width - popupWidth) / 2;
+            let top = rect.bottom + padding;
+
+            // 确保弹窗不超出视窗边界
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            if (left < 10) {
+                left = 10;
+            } else if (left + popupWidth > viewportWidth - 10) {
+                left = viewportWidth - popupWidth - 10;
+            }
+
+            if (top + popupHeight > viewportHeight - 10) {
+                top = rect.top - popupHeight - padding;
+                aiPopup.classList.add('popup-top');
+            } else {
+                aiPopup.classList.remove('popup-top');
+            }
+
+            // 设置弹窗位置并显示
+            aiPopup.style.left = `${left}px`;
+            aiPopup.style.top = `${top}px`;
+            aiPopup.style.display = 'block';
+
+            // 调整三角形指示器的水平位置
+            const triangleLeft = rect.left + rect.width / 2 - left;
+            aiPopup.style.setProperty('--triangle-left', `${triangleLeft}px`);
+        }
+
+        function hidePopup() {
+            aiPopup.style.display = 'none';
+            selectedText = '';
+        }
+
+        // 点击页面其他地方隐藏弹窗
+        document.addEventListener('mousedown', (e) => {
+            if (!aiPopup.contains(e.target) && !resultArea.contains(e.target) && aiPopup.style.display === 'block') {
+                hidePopup();
+            }
+        });
+
+        // ESC键隐藏弹窗和结果
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hidePopup();
+                hideResult();
+            }
+        });
+
+        // 处理AI功能按钮点击
+        document.querySelectorAll('.ai-button').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const action = button.dataset.action;
+                
+                // 隐藏弹窗
+                hidePopup();
+                
+                // 显示结果区域（加载中）
+                showResult(action);
+                
+                // 调用AI功能
+                await handleAIAction(action, selectedText);
+            });
+        });
+
+        async function handleAIAction(action, text) {
+            try {
+                // 调用 Electron API
+                const response = await window.electronAPI.performAIAction({
+                    action: action,
+                    text: text
+                });
+
+                if (response.success) {
+                    // 显示结果
+                    displayResult(action, text, response.result);
+                } else {
+                    displayError('AI处理失败，请重试');
+                }
+            } catch (error) {
+                console.error('AI处理错误:', error);
+                displayError('发生错误，请检查网络连接');
+            }
+        }
+
+        function showResult(action) {
+            const actionNames = {
+                translate: '翻译',
+                explain: '解释',
+                summarize: '总结',
+                rewrite: '改写',
+                grammar: '语法检查'
+            };
+            
+            resultTitle.textContent = `${actionNames[action] || 'AI'} 结果`;
+            resultContent.innerHTML = '<div class="loading"></div> 处理中...';
+            resultArea.style.display = 'block';
+        }
+
+        function displayResult(action, originalText, result) {
+            let html = `<div class="result-text">${result}</div>`;
+            
+            if (originalText.length < 100) {
+                html += `<div class="result-original"><strong>原文：</strong>${originalText}</div>`;
+            }
+            
+            resultContent.innerHTML = html;
+        }
+
+        function displayError(message) {
+            resultContent.innerHTML = `<div style="color: #e74c3c;">${message}</div>`;
+        }
+
+        function hideResult() {
+            resultArea.style.display = 'none';
+        }
+
+        // 关闭结果按钮
+        closeResult.addEventListener('click', hideResult);
+
+        // 添加弹窗在上方时的样式
+        const style = document.createElement('style');
+        style.textContent = `
+            .ai-popup.popup-top::before {
+                top: auto;
+                bottom: -7px;
+                border-bottom: none;
+                border-top: 7px solid white;
+                filter: drop-shadow(0 2px 2px rgba(0,0,0,0.08));
+            }
+            
+            .ai-popup::before {
+                left: var(--triangle-left, 50%);
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
