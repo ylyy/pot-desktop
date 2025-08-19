@@ -13,6 +13,7 @@ const {
 const path = require('path');
 const ConfigStore = require('./config-store');
 const axios = require('axios');
+const { exec } = require('child_process');
 
 // 全局变量
 let mainWindow;
@@ -74,8 +75,10 @@ function createMainWindow() {
     mainWindow.loadFile('settings.html');
 
     mainWindow.on('close', (e) => {
-        e.preventDefault();
-        mainWindow.hide();
+        if (!app.isQuiting) {
+            e.preventDefault();
+            mainWindow.hide();
+        }
     });
 }
 
@@ -99,8 +102,10 @@ function createFloatingWindow() {
     floatingWindow.loadFile('floating.html');
     
     floatingWindow.on('close', (e) => {
-        e.preventDefault();
-        floatingWindow.hide();
+        if (!app.isQuiting) {
+            e.preventDefault();
+            floatingWindow.hide();
+        }
     });
 
     // 失去焦点时隐藏
@@ -811,83 +816,74 @@ let isDetecting = false;
 
 function startSmartSelectionDetector() {
     console.log('启动智能划词检测...');
-    
-    // 使用 globalShortcut 捕获鼠标释放事件的替代方案
-    // 创建一个透明的全屏窗口来捕获鼠标事件
-    const { BrowserWindow } = require('electron');
-    
-    let detectorWindow = new BrowserWindow({
-        width: 1,
-        height: 1,
-        x: -100,
-        y: -100,
-        frame: false,
-        transparent: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
-        }
-    });
-    
-    detectorWindow.setIgnoreMouseEvents(true);
-    detectorWindow.hide();
-    
-    // 使用定时器检测选中的文本
+
+    const pollIntervalMs = 350;
+
+    // Linux: 通过 PRIMARY 选区读取无需复制即可获取选中文本
+    if (process.platform === 'linux') {
+        smartDetectorInterval = setInterval(() => {
+            if (isDetecting) return;
+
+            // 读取 PRIMARY selection（优先 xclip，失败退回 xsel）
+            exec('xclip -o -selection primary', { timeout: 200 }, (err, stdout) => {
+                if (err || !stdout) {
+                    exec('xsel -o', { timeout: 200 }, (err2, stdout2) => {
+                        handleSelection(stdout2 || '');
+                    });
+                } else {
+                    handleSelection(stdout);
+                }
+            });
+
+            function handleSelection(text) {
+                const selected = (text || '').trim();
+                if (!selected) return;
+                if (selected === lastSelectedText) return;
+                if (selected.length > (configStore.get('general.maxTextLength') || 5000)) return;
+
+                lastSelectedText = selected;
+                const mousePos = screen.getCursorScreenPoint();
+                showFloatingWindow(mousePos, selected);
+
+                isDetecting = true;
+                setTimeout(() => { isDetecting = false; }, 800);
+            }
+        }, pollIntervalMs);
+        return;
+    }
+
+    // 非 Linux 平台，退回原有的“模拟复制+读剪贴板”方案
     smartDetectorInterval = setInterval(() => {
         if (isDetecting) return;
-        
+
         const currentMousePos = screen.getCursorScreenPoint();
-        
-        // 保存当前剪贴板
         const oldClipboard = clipboard.readText();
-        
-        // 清空剪贴板
         clipboard.clear();
-        
-        // 模拟复制
+
         try {
             if (process.platform === 'darwin') {
                 const { execSync } = require('child_process');
                 execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
             } else {
-                const robot = require('robotjs');
-                robot.keyTap('c', 'control');
+                try {
+                    const robot = require('robotjs');
+                    robot.keyTap('c', 'control');
+                } catch {}
             }
-        } catch (e) {
-            // 忽略错误
-        }
-        
-        // 检查剪贴板
+        } catch {}
+
         setTimeout(() => {
             const selectedText = clipboard.readText();
-            
-            // 恢复原剪贴板
-            if (oldClipboard) {
-                clipboard.writeText(oldClipboard);
-            }
-            
-            // 如果有新的选中文本
-            if (selectedText && 
-                selectedText.trim().length > 0 &&
-                selectedText !== lastSelectedText &&
-                selectedText.trim().length <= configStore.get('general.maxTextLength')) {
-                
-                console.log('检测到文本选择:', selectedText.substring(0, 50) + '...');
+            if (oldClipboard) clipboard.writeText(oldClipboard);
+
+            if (selectedText && selectedText.trim().length > 0 && selectedText !== lastSelectedText && selectedText.trim().length <= configStore.get('general.maxTextLength')) {
                 lastSelectedText = selectedText;
-                
-                // 显示悬浮窗
                 showFloatingWindow(currentMousePos, selectedText);
-                
-                // 防止连续触发
                 isDetecting = true;
-                setTimeout(() => {
-                    isDetecting = false;
-                }, 1000);
+                setTimeout(() => { isDetecting = false; }, 1000);
             }
-        }, 100);
-    }, 500); // 每500ms检查一次
+        }, 120);
+    }, pollIntervalMs);
 }
 
 let smartDetectorInterval = null;
@@ -975,8 +971,14 @@ app.on('will-quit', () => {
     }
     // 停止智能划词检测
     stopSmartSelectionDetector();
+    try { if (tray) { tray.destroy(); tray = null; } } catch {}
 });
 
 app.on('window-all-closed', () => {
     // 不退出应用，保持在系统托盘
+});
+
+// 允许真正退出时释放资源并不再拦截窗口关闭
+app.on('before-quit', () => {
+    app.isQuiting = true;
 });
