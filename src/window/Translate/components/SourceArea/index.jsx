@@ -41,6 +41,7 @@ export default function SourceArea(props) {
     const [recognizeServiceList] = useConfig('recognize_service_list', ['system', 'tesseract']);
     const [ttsServiceList] = useConfig('tts_service_list', ['lingva_tts']);
     const [hideWindow] = useConfig('translate_hide_window', false);
+    const [clipboardMonitor] = useConfig('clipboard_monitor', false);
     const [hideSource] = useConfig('hide_source', false);
     const [ttsPluginInfo, setTtsPluginInfo] = useState();
     const [windowType, setWindowType] = useState('[SELECTION_TRANSLATE]');
@@ -51,7 +52,8 @@ export default function SourceArea(props) {
 
     const handleNewText = async (text) => {
         text = text.trim();
-        if (hideWindow) {
+        // 仅当启用了剪贴板监听并且设置了隐藏窗口时才隐藏
+        if (hideWindow && clipboardMonitor) {
             appWindow.hide();
         } else {
             appWindow.show();
