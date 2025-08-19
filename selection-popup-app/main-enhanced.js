@@ -223,19 +223,38 @@ function registerIPCHandlers() {
     // AI功能处理
     ipcMain.handle('perform-ai-action', async (event, data) => {
         try {
-            const result = await callAIAPI(data);
-            
-            // 显示结果窗口
-            showResultWindow(data.buttonName || data.action, data.text, result);
-            
+            const actionName = data.buttonName || data.action;
+
+            // 先创建并显示结果窗口，便于接收流式增量
+            const resultWindow = showResultWindow(actionName, data.text, null, data.anchor);
+
             // 隐藏悬浮窗口
             if (floatingWindow) {
                 floatingWindow.hide();
             }
-            
+
+            // 调用实际AI接口（可能为流式）
+            const result = await callAIAPI(data);
+
+            // 最终结果（用于非流式或流式的补全）
+            if (resultWindow && !resultWindow.isDestroyed()) {
+                resultWindow.webContents.send('show-result', {
+                    action: actionName,
+                    text: data.text,
+                    result
+                });
+            }
+
             return { success: true, result };
         } catch (error) {
             console.error('AI API调用失败:', error);
+            if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                global.currentResultWindow.webContents.send('show-result', {
+                    action: data.buttonName || data.action,
+                    text: data.text,
+                    error: error.message || String(error)
+                });
+            }
             return { success: false, error: error.message };
         }
     });
@@ -283,29 +302,103 @@ async function callOpenAI(data, config) {
     if (!config.apiKey) {
         throw new Error('请先配置OpenAI API Key');
     }
-    
-    const response = await axios.post(
-        `${config.apiUrl}/chat/completions`,
-        {
-            model: config.model,
-            messages: [
-                {
-                    role: 'user',
-                    content: data.prompt || data.text
+
+    const apiBase = (config.apiUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
+    const isStreaming = config.streaming !== false; // 默认开启流式
+
+    const payload = {
+        model: config.model,
+        messages: [
+            {
+                role: 'user',
+                content: data.prompt || data.text
+            }
+        ],
+        temperature: config.temperature,
+        max_tokens: config.maxTokens,
+        stream: isStreaming
+    };
+
+    if (!isStreaming) {
+        const response = await axios.post(
+            `${apiBase}/chat/completions`,
+            payload,
+            {
+                headers: {
+                    'Authorization': `Bearer ${config.apiKey}`,
+                    'Content-Type': 'application/json'
                 }
-            ],
-            temperature: config.temperature,
-            max_tokens: config.maxTokens
-        },
-        {
+            }
+        );
+        return response.data.choices[0].message.content;
+    }
+
+    // 流式处理 (SSE)
+    return new Promise((resolve, reject) => {
+        const https = require('https');
+        const url = require('url');
+        const parsedUrl = url.parse(`${apiBase}/chat/completions`);
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || 443,
+            path: parsedUrl.path,
+            method: 'POST',
             headers: {
                 'Authorization': `Bearer ${config.apiKey}`,
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream'
             }
-        }
-    );
-    
-    return response.data.choices[0].message.content;
+        };
+
+        let fullResponse = '';
+        const req = https.request(options, (res) => {
+            if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+                let errorBody = '';
+                res.on('data', chunk => errorBody += chunk);
+                res.on('end', () => reject(new Error(`API请求失败 (${res.statusCode}): ${errorBody || res.statusMessage}`)));
+                return;
+            }
+            res.setEncoding('utf8');
+            let buffer = '';
+            res.on('data', (chunk) => {
+                buffer += chunk;
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
+                    if (trimmed.startsWith('data: ')) {
+                        const dataStr = trimmed.slice(6);
+                        if (dataStr === '[DONE]') {
+                            resolve(fullResponse || '');
+                            return;
+                        }
+                        try {
+                            const json = JSON.parse(dataStr);
+                            const delta = json.choices && json.choices[0] && json.choices[0].delta;
+                            if (delta && typeof delta.content === 'string') {
+                                fullResponse += delta.content;
+                                if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                                    global.currentResultWindow.webContents.send('update-result', {
+                                        text: fullResponse,
+                                        incremental: delta.content,
+                                        streaming: true
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            // 忽略解析错误
+                        }
+                    }
+                }
+            });
+            res.on('end', () => resolve(fullResponse));
+            res.on('error', (e) => reject(new Error('响应处理错误: ' + e.message)));
+        });
+        req.on('error', (e) => reject(new Error('网络请求失败: ' + e.message)));
+        req.write(JSON.stringify(payload));
+        req.end();
+    });
 }
 
 // 调用Azure OpenAI API
@@ -614,10 +707,12 @@ async function callDifyAPI(data, config) {
 }
 
 // 显示结果窗口
-function showResultWindow(action, text, result) {
+function showResultWindow(action, text, result, anchor) {
+    const winWidth = 600;
+    const winHeight = 500;
     const resultWindow = new BrowserWindow({
-        width: 600,
-        height: 500,
+        width: winWidth,
+        height: winHeight,
         frame: true,
         alwaysOnTop: true,
         webPreferences: {
@@ -631,6 +726,26 @@ function showResultWindow(action, text, result) {
     global.currentResultWindow = resultWindow;
 
     resultWindow.loadFile('result.html');
+
+    // 如果提供了锚点，则将窗口定位到按钮附近
+    if (anchor && anchor.rect) {
+        try {
+            const fwBounds = floatingWindow ? floatingWindow.getBounds() : { x: 0, y: 0 };
+            let x = Math.round(fwBounds.x + anchor.rect.left + anchor.rect.width / 2 - winWidth / 2);
+            let y = Math.round(fwBounds.y + anchor.rect.top + anchor.rect.height + 8);
+
+            const display = screen.getDisplayNearestPoint({ x, y });
+            const work = display.workArea;
+            // 边界修正
+            if (x < work.x) x = work.x;
+            if (x + winWidth > work.x + work.width) x = work.x + work.width - winWidth;
+            if (y + winHeight > work.y + work.height) {
+                // 放到按钮上方
+                y = Math.max(work.y, Math.round(fwBounds.y + anchor.rect.top - winHeight - 8));
+            }
+            resultWindow.setPosition(x, y);
+        } catch {}
+    }
     
     resultWindow.webContents.on('did-finish-load', () => {
         resultWindow.webContents.send('show-result', { 
@@ -643,6 +758,7 @@ function showResultWindow(action, text, result) {
     resultWindow.on('closed', () => {
         global.currentResultWindow = null;
     });
+    return resultWindow;
 }
 
 // 显示悬浮窗口

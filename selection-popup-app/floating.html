@@ -102,8 +102,8 @@
             display: none;
         }
     </style>
-</head>
-<body>
+    </head>
+    <body>
     <div class="floating-container">
         <div class="ai-buttons" id="aiButtons">
             <!-- 按钮将动态生成 -->
@@ -140,29 +140,42 @@
                     <span class="icon">${button.icon || '🔧'}</span>
                     <span>${button.name}</span>
                 `;
-                btn.onclick = () => handleButtonClick(button);
+                btn.onclick = () => handleButtonClick(button, btn);
                 container.appendChild(btn);
             });
         }
 
         // 处理按钮点击
-        async function handleButtonClick(button) {
+        async function handleButtonClick(button, btnEl) {
             if (!currentText) return;
             
             // 使用按钮的提示词模板
             const prompt = button.prompt.replace('{text}', currentText);
+            
+            // 计算按钮DOM的屏幕位置用于结果窗锚定
+            const anchor = (() => {
+                try {
+                    if (!btnEl || !btnEl.getBoundingClientRect) return null;
+                    const rect = btnEl.getBoundingClientRect();
+                    return {
+                        rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+                        dpr: window.devicePixelRatio || 1
+                    };
+                } catch (e) { return null; }
+            })();
             
             // 发送AI请求
             await window.electronAPI.performAIAction({
                 action: button.id,
                 text: currentText,
                 prompt: prompt,
-                buttonName: button.name
+                buttonName: button.name,
+                anchor
             });
         }
 
         // 初始加载按钮
         loadButtons();
     </script>
-</body>
-</html>
+    </body>
+    </html>
