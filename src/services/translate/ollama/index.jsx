@@ -2,7 +2,7 @@ import { Language } from './info';
 import { Ollama } from 'ollama/browser';
 
 export async function translate(text, from, to, options = {}) {
-    const { config, setResult, detect } = options;
+    const { config, setResult, detect, signal } = options;
 
     let { stream, promptList, requestPath, model } = config;
 
@@ -30,6 +30,11 @@ export async function translate(text, from, to, options = {}) {
     if (stream) {
         let target = '';
         for await (const part of response) {
+            // 检查是否被取消
+            if (signal && signal.aborted) {
+                ollama.abort();
+                return '[CANCELLED]';
+            }
             target += part.message.content;
             if (setResult) {
                 setResult(target + '_');

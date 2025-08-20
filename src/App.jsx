@@ -61,7 +61,8 @@ export default function App() {
                 if (e.ctrlKey && !allowKeys.includes(e.key.toLowerCase())) {
                     e.preventDefault();
                 }
-                if (e.key.startsWith('F') && e.key.length > 1) {
+                // 不阻止 F12，只阻止其他 F 键
+                if (e.key.startsWith('F') && e.key.length > 1 && e.key !== 'F12') {
                     e.preventDefault();
                 }
                 if (e.key === 'Escape') {

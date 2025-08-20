@@ -50,6 +50,7 @@ import {
 } from '../../../../utils/service_instance';
 
 let translateID = [];
+let abortControllers = [];
 
 export default function TargetArea(props) {
     const { index, name, translateServiceInstanceList, pluginList, serviceInstanceConfigMap, ...drag } = props;
@@ -164,6 +165,15 @@ export default function TargetArea(props) {
         let id = nanoid();
         translateID[index] = id;
 
+        // 取消之前的请求
+        if (abortControllers[index]) {
+            abortControllers[index].abort();
+        }
+        
+        // 创建新的 AbortController
+        const abortController = new AbortController();
+        abortControllers[index] = abortController;
+
         const translateServiceName = getServiceName(currentTranslateServiceInstanceKey);
 
         if (whetherPluginService(currentTranslateServiceInstanceKey)) {
@@ -260,6 +270,7 @@ export default function TargetArea(props) {
                             setResult(v);
                             setHideOnce(false);
                         },
+                        signal: abortController.signal,
                     })
                     .then(
                         (v) => {
