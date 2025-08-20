@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 执行AI操作
     performAIAction: (data) => ipcRenderer.invoke('perform-ai-action', data),
     
+    // 取消AI请求
+    cancelAIRequest: () => ipcRenderer.invoke('cancel-ai-request'),
+    
     // 接收显示文本的事件
     onShowText: (callback) => {
         ipcRenderer.on('show-text', (event, text) => {

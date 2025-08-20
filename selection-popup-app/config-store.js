@@ -104,7 +104,7 @@ class ConfigStore {
             // 通用设置
             general: {
                 autoStart: true,
-                shortcut: 'CommandOrControl+Q',
+                shortcut: 'Alt+Shift+Q', // 更安全的快捷键组合
                 theme: 'light',
                 language: 'zh-CN',
                 maxTextLength: 5000,

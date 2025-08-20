@@ -114,6 +114,7 @@
 
     <script>
         let currentText = '';
+        window.isProcessingAI = false; // 初始化AI处理状态
 
         // 接收选中的文本
         window.electronAPI.onShowText((text) => {
@@ -149,15 +150,52 @@
         async function handleButtonClick(button) {
             if (!currentText) return;
             
-            // 使用按钮的提示词模板
-            const prompt = button.prompt.replace('{text}', currentText);
+            // 如果正在处理，显示取消状态
+            if (window.isProcessingAI) {
+                // 取消当前请求
+                await window.electronAPI.cancelAIRequest();
+                return;
+            }
             
-            // 发送AI请求
-            await window.electronAPI.performAIAction({
-                action: button.id,
-                text: currentText,
-                prompt: prompt,
-                buttonName: button.name
+            // 设置处理状态
+            window.isProcessingAI = true;
+            updateButtonStates();
+            
+            try {
+                // 使用按钮的提示词模板
+                const prompt = button.prompt.replace('{text}', currentText);
+                
+                // 发送AI请求
+                await window.electronAPI.performAIAction({
+                    action: button.id,
+                    text: currentText,
+                    prompt: prompt,
+                    buttonName: button.name
+                });
+            } catch (error) {
+                console.error('AI请求失败:', error);
+            } finally {
+                // 重置处理状态
+                window.isProcessingAI = false;
+                updateButtonStates();
+            }
+        }
+        
+        // 更新按钮状态
+        function updateButtonStates() {
+            const buttons = document.querySelectorAll('.ai-button');
+            buttons.forEach(btn => {
+                if (window.isProcessingAI) {
+                    btn.innerHTML = `
+                        <span class="icon">⏹️</span>
+                        <span>取消</span>
+                    `;
+                    btn.style.background = '#ff6b6b';
+                    btn.style.color = 'white';
+                } else {
+                    // 恢复原始状态
+                    loadButtons();
+                }
             });
         }
 

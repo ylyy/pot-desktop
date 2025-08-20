@@ -21,6 +21,8 @@ let floatingWindow;
 let configStore;
 let clipboardWatcher;
 let lastClipboard = '';
+let currentAIRequest = null; // 当前AI请求的控制器
+let isProcessingAI = false; // AI处理状态标志
 
 // 应用初始化
 app.whenReady().then(() => {
@@ -223,6 +225,13 @@ function registerIPCHandlers() {
     // AI功能处理
     ipcMain.handle('perform-ai-action', async (event, data) => {
         try {
+            // 如果正在处理AI请求，先取消之前的请求
+            if (isProcessingAI && currentAIRequest) {
+                currentAIRequest.abort();
+                console.log('取消之前的AI请求');
+            }
+            
+            isProcessingAI = true;
             const result = await callAIAPI(data);
             
             // 显示结果窗口
@@ -233,8 +242,19 @@ function registerIPCHandlers() {
                 floatingWindow.hide();
             }
             
+            isProcessingAI = false;
+            currentAIRequest = null;
+            
             return { success: true, result };
         } catch (error) {
+            isProcessingAI = false;
+            currentAIRequest = null;
+            
+            if (error.name === 'AbortError') {
+                console.log('AI请求被取消');
+                return { success: false, error: '请求被取消' };
+            }
+            
             console.error('AI API调用失败:', error);
             return { success: false, error: error.message };
         }
@@ -256,6 +276,18 @@ function registerIPCHandlers() {
     // 打开外部链接
     ipcMain.handle('open-external', (event, url) => {
         shell.openExternal(url);
+    });
+    
+    // 取消当前AI请求
+    ipcMain.handle('cancel-ai-request', () => {
+        if (isProcessingAI && currentAIRequest) {
+            currentAIRequest.abort();
+            isProcessingAI = false;
+            currentAIRequest = null;
+            console.log('AI请求已取消');
+            return { success: true };
+        }
+        return { success: false, message: '没有正在进行的AI请求' };
     });
 }
 
@@ -372,6 +404,10 @@ async function callCustomAPI(data, config) {
             const http = require('http');
             const url = require('url');
             
+            // 创建AbortController用于取消请求
+            const controller = new AbortController();
+            currentAIRequest = controller;
+            
             const parsedUrl = url.parse(config.url);
             const protocol = parsedUrl.protocol === 'https:' ? https : http;
             
@@ -384,7 +420,8 @@ async function callCustomAPI(data, config) {
                     'Content-Type': 'application/json',
                     ...config.headers,
                     'Accept': 'text/event-stream'
-                }
+                },
+                signal: controller.signal
             };
             
             let fullResponse = '';
@@ -426,7 +463,11 @@ async function callCustomAPI(data, config) {
             });
             
             req.on('error', (e) => {
-                reject(e);
+                if (e.name === 'AbortError') {
+                    reject(e);
+                } else {
+                    reject(e);
+                }
             });
             
             req.write(JSON.stringify(bodyObj));
@@ -434,11 +475,16 @@ async function callCustomAPI(data, config) {
         });
     } else {
         // 非流式处理（原有逻辑）
+        // 创建AbortController用于取消请求
+        const controller = new AbortController();
+        currentAIRequest = controller;
+        
         const response = await axios({
             method: config.method || 'POST',
             url: config.url,
             headers: config.headers || {},
-            data: bodyObj
+            data: bodyObj,
+            signal: controller.signal
         });
         
         // 尝试从响应中提取结果
@@ -797,30 +843,26 @@ function registerGlobalShortcut(shortcut) {
     globalShortcut.unregisterAll();
     
     if (shortcut) {
-        globalShortcut.register(shortcut, () => {
+        // 检查快捷键是否与系统冲突
+        const safeShortcut = getSafeShortcut(shortcut);
+        
+        globalShortcut.register(safeShortcut, async () => {
+            // 防止在输入框中触发
+            if (await isInputFocused()) {
+                return;
+            }
+            
             // 保存当前剪贴板
             const oldClipboard = clipboard.readText();
             
-            // 模拟复制
-            if (process.platform === 'darwin') {
-                // macOS: 使用 AppleScript
-                const { execSync } = require('child_process');
-                execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
-            } else {
-                // Windows/Linux: 需要 robotjs
-                try {
-                    const robot = require('robotjs');
-                    robot.keyTap('c', 'control');
-                } catch (e) {
-                    console.error('需要安装 robotjs 模块');
-                }
-            }
+            // 模拟复制 - 使用更安全的方式
+            simulateCopy();
             
             // 等待复制完成
             setTimeout(() => {
                 const selectedText = clipboard.readText();
                 
-                if (selectedText && selectedText !== oldClipboard) {
+                if (selectedText && selectedText !== oldClipboard && selectedText.trim()) {
                     const mousePos = screen.getCursorScreenPoint();
                     showFloatingWindow(mousePos, selectedText);
                     
@@ -829,8 +871,93 @@ function registerGlobalShortcut(shortcut) {
                         clipboard.writeText(oldClipboard);
                     }, 100);
                 }
-            }, 50);
+            }, 100);
         });
+    }
+}
+
+// 获取安全的快捷键组合
+function getSafeShortcut(shortcut) {
+    // 避免与输入法和浏览器冲突的快捷键
+    const conflictShortcuts = [
+        'CommandOrControl+C',
+        'CommandOrControl+V', 
+        'CommandOrControl+X',
+        'CommandOrControl+Z',
+        'CommandOrControl+Y',
+        'CommandOrControl+A',
+        'CommandOrControl+F',
+        'CommandOrControl+R',
+        'F12',
+        'F5',
+        'F11',
+        'Shift+F12',
+        'CommandOrControl+Shift+I',
+        'CommandOrControl+Shift+C',
+        'CommandOrControl+Shift+J'
+    ];
+    
+    if (conflictShortcuts.includes(shortcut)) {
+        // 使用更安全的默认快捷键
+        return 'Alt+Shift+Q';
+    }
+    
+    return shortcut;
+}
+
+// 检查是否有输入框获得焦点
+async function isInputFocused() {
+    try {
+        // 检查当前活动窗口
+        const focusedWindow = BrowserWindow.getFocusedWindow();
+        if (!focusedWindow) return false;
+        
+        // 通过webContents检查是否有输入框获得焦点
+        const webContents = focusedWindow.webContents;
+        if (webContents && !webContents.isDestroyed()) {
+            const result = await webContents.executeJavaScript(`
+                document.activeElement && (
+                    document.activeElement.tagName === 'INPUT' ||
+                    document.activeElement.tagName === 'TEXTAREA' ||
+                    document.activeElement.contentEditable === 'true' ||
+                    document.activeElement.isContentEditable
+                )
+            `).catch(() => false);
+            return result;
+        }
+    } catch (e) {
+        console.log('检查输入框焦点失败:', e);
+    }
+    
+    return false;
+}
+
+// 模拟复制操作 - 更安全的方式
+function simulateCopy() {
+    if (process.platform === 'darwin') {
+        // macOS: 使用 AppleScript
+        try {
+            const { execSync } = require('child_process');
+            execSync('osascript -e \'tell application "System Events" to keystroke "c" using command down\'');
+        } catch (e) {
+            console.error('macOS复制失败:', e);
+        }
+    } else if (process.platform === 'win32') {
+        // Windows: 使用robotjs
+        try {
+            const robot = require('robotjs');
+            robot.keyTap('c', 'control');
+        } catch (e) {
+            console.error('Windows复制失败，需要安装robotjs模块:', e);
+        }
+    } else {
+        // Linux: 使用xdotool
+        try {
+            const { execSync } = require('child_process');
+            execSync('xdotool key ctrl+c');
+        } catch (e) {
+            console.error('Linux复制失败，需要安装xdotool:', e);
+        }
     }
 }
 
