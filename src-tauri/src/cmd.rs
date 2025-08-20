@@ -6,11 +6,20 @@ use crate::APP;
 use log::{error, info};
 use serde_json::{json, Value};
 use std::io::Read;
-use tauri::Manager;
+use tauri::{Manager, ClipboardManager};
 
 #[tauri::command]
 pub fn get_text(state: tauri::State<StringWrapper>) -> String {
     return state.0.lock().unwrap().to_string();
+}
+
+#[tauri::command]
+pub fn get_clipboard_text(app_handle: tauri::AppHandle) -> Result<String, String> {
+    match app_handle.clipboard_manager().read_text() {
+        Ok(Some(text)) => Ok(text),
+        Ok(None) => Ok("".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 #[tauri::command]

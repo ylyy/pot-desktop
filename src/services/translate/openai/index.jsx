@@ -3,7 +3,7 @@ import { Language } from './info';
 import { defaultRequestArguments } from './Config';
 
 export async function translate(text, from, to, options) {
-    const { config, setResult, detect } = options;
+    const { config, setResult, detect, signal } = options;
 
     let { service, requestPath, model, apiKey, stream, promptList, requestArguments } = config;
 
@@ -65,6 +65,7 @@ export async function translate(text, from, to, options) {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(body),
+            signal: signal,
         });
         if (res.ok) {
             let target = '';
@@ -76,6 +77,11 @@ export async function translate(text, from, to, options) {
                     if (done) {
                         setResult(target.trim());
                         return target.trim();
+                    }
+                    // 检查是否被取消
+                    if (signal && signal.aborted) {
+                        reader.cancel();
+                        return '[CANCELLED]';
                     }
                     const str = new TextDecoder().decode(value);
                     let datas = str.split('data:');

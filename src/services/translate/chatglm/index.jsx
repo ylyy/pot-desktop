@@ -3,7 +3,7 @@ import * as jose from 'jose';
 import { info } from 'tauri-plugin-log-api';
 
 export async function translate(text, from, to, options = {}) {
-    const { config, setResult, detect } = options;
+    const { config, setResult, detect, signal } = options;
 
     let { model, apiKey, promptList } = config;
 
@@ -50,6 +50,7 @@ export async function translate(text, from, to, options = {}) {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(body),
+            signal: signal,
         });
         if (!response.ok) {
             throw new Error(`Http Request Error\nHttp Status: ${response.status}\n${await response.text()}`);
@@ -61,6 +62,12 @@ export async function translate(text, from, to, options = {}) {
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
+                
+                // 检查是否被取消
+                if (signal && signal.aborted) {
+                    reader.cancel();
+                    return '[CANCELLED]';
+                }
 
                 // Convert binary data to string
                 buffer += decoder.decode(value, { stream: true });

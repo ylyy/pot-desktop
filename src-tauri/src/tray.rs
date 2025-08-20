@@ -198,9 +198,19 @@ fn on_restart_click(app: &AppHandle) {
     app.restart();
 }
 fn on_quit_click(app: &AppHandle) {
+    // 停止剪贴板监听
+    let state = app.state::<crate::clipboard::ClipboardMonitorEnableWrapper>();
+    if let Ok(mut clipboard_monitor) = state.0.lock() {
+        *clipboard_monitor = "false".to_string();
+    }
+    
+    // 注销所有全局快捷键
     app.global_shortcut_manager().unregister_all().unwrap();
+    
     info!("============== Quit App ==============");
-    app.exit(0);
+    
+    // 强制退出，确保所有资源被释放
+    std::process::exit(0);
 }
 
 fn tray_menu_en() -> tauri::SystemTrayMenu {

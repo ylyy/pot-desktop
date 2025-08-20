@@ -6,7 +6,7 @@ import { HiOutlineVolumeUp } from 'react-icons/hi';
 import { appWindow } from '@tauri-apps/api/window';
 import toast, { Toaster } from 'react-hot-toast';
 import { listen } from '@tauri-apps/api/event';
-import { MdContentCopy } from 'react-icons/md';
+import { MdContentCopy, MdContentPaste } from 'react-icons/md';
 import { MdSmartButton } from 'react-icons/md';
 import { useTranslation } from 'react-i18next';
 import { HiTranslate } from 'react-icons/hi';
@@ -168,6 +168,11 @@ export default function SourceArea(props) {
     };
 
     const keyDown = (event) => {
+        // 避免与输入法冲突，检查是否正在组合输入
+        if (event.isComposing || event.keyCode === 229) {
+            return;
+        }
+        
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             detect_language(sourceText).then(() => {
@@ -413,6 +418,28 @@ export default function SourceArea(props) {
                                     }}
                                 >
                                     <MdContentCopy className='text-[16px]' />
+                                </Button>
+                            </Tooltip>
+                            <Tooltip content={t('translate.paste')}>
+                                <Button
+                                    isIconOnly
+                                    variant='light'
+                                    size='sm'
+                                    onPress={async () => {
+                                        try {
+                                            const text = await invoke('get_clipboard_text');
+                                            if (text) {
+                                                setSourceText(text);
+                                                detect_language(text).then(() => {
+                                                    syncSourceText();
+                                                });
+                                            }
+                                        } catch (e) {
+                                            toast.error(e.toString(), { style: toastStyle });
+                                        }
+                                    }}
+                                >
+                                    <MdContentPaste className='text-[16px]' />
                                 </Button>
                             </Tooltip>
                             <Tooltip content={t('translate.delete_newline')}>
