@@ -229,19 +229,36 @@ function registerIPCHandlers() {
     // AI功能处理
     ipcMain.handle('perform-ai-action', async (event, data) => {
         try {
-            const result = await callAIAPI(data);
-
-            // 显示结果窗口
-            showResultWindow(data.buttonName || data.action, data.text, result);
+            // 先显示结果窗口，立即呈现加载态并准备接收流式更新
+            showResultWindow(data.buttonName || data.action, data.text);
 
             // 隐藏悬浮窗口
             if (floatingWindow) {
                 floatingWindow.hide();
             }
 
+            const result = await callAIAPI(data);
+
+            // 返回最终结果，并将最终内容推送到结果窗口（适配非流式/流式收尾）
+            if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                global.currentResultWindow.webContents.send('show-result', {
+                    action: data.buttonName || data.action,
+                    text: data.text,
+                    result
+                });
+            }
+
             return { success: true, result };
         } catch (error) {
             console.error('AI API调用失败:', error);
+            // 将错误也同步到结果窗口
+            if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                global.currentResultWindow.webContents.send('show-result', {
+                    action: data.buttonName || data.action,
+                    text: data.text,
+                    error: error.message
+                });
+            }
             return { success: false, error: error.message };
         }
     });

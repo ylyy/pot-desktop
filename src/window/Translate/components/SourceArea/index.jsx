@@ -49,6 +49,7 @@ export default function SourceArea(props) {
     const { t } = useTranslation();
     const textAreaRef = useRef();
     const speak = useVoice();
+    const isComposingRef = useRef(false);
 
     const handleNewText = async (text) => {
         text = text.trim();
@@ -269,7 +270,7 @@ export default function SourceArea(props) {
     const changeSourceText = async (text) => {
         setDetectLanguage('');
         await setSourceText(text);
-        if (dynamicTranslate) {
+        if (dynamicTranslate && !isComposingRef.current) {
             if (sourceTextChangeTimer) {
                 clearTimeout(sourceTextChangeTimer);
             }
@@ -384,6 +385,14 @@ export default function SourceArea(props) {
                         className={`text-[${appFontSize}px] bg-content1 h-full resize-none outline-none`}
                         value={sourceText}
                         onKeyDown={keyDown}
+                        onCompositionStart={() => {
+                            isComposingRef.current = true;
+                        }}
+                        onCompositionEnd={(e) => {
+                            isComposingRef.current = false;
+                            // 结束合成后再触发一次变更，确保动态翻译正确触发
+                            changeSourceText(e.target.value);
+                        }}
                         onChange={(e) => {
                             const v = e.target.value;
                             changeSourceText(v);
