@@ -229,19 +229,61 @@ function registerIPCHandlers() {
     // AI功能处理
     ipcMain.handle('perform-ai-action', async (event, data) => {
         try {
-            const result = await callAIAPI(data);
-
-            // 显示结果窗口
-            showResultWindow(data.buttonName || data.action, data.text, result);
+            // 先显示结果窗口，立即呈现加载态并准备接收流式更新
+            showResultWindow(data.buttonName || data.action, data.text);
 
             // 隐藏悬浮窗口
             if (floatingWindow) {
                 floatingWindow.hide();
             }
 
+            // 仅在用户点击功能按钮时，根据需要执行一次复制，以避免实时干扰
+            if ((!data.text || data.text.trim().length === 0) && data.requireCopy === true) {
+                // 尝试不干扰用户：优先 Linux selection，其他平台仅在明确要求时才模拟复制
+                if (process.platform === 'linux') {
+                    try {
+                        const sel = clipboard.readText('selection');
+                        if (sel) data.text = sel;
+                    } catch {}
+                }
+                if (!data.text) {
+                    // 回退到模拟复制（尽量不破坏剪贴板）
+                    const oldClipboard = clipboard.readText();
+                    simulateCopyShortcut();
+                    await new Promise(r => setTimeout(r, 120));
+                    const copied = clipboard.readText();
+                    if (copied && copied !== oldClipboard) {
+                        data.text = copied;
+                        // 尽快恢复剪贴板
+                        setTimeout(() => {
+                            try { clipboard.writeText(oldClipboard); } catch {}
+                        }, 100);
+                    }
+                }
+            }
+
+            const result = await callAIAPI(data);
+
+            // 返回最终结果，并将最终内容推送到结果窗口（适配非流式/流式收尾）
+            if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                global.currentResultWindow.webContents.send('show-result', {
+                    action: data.buttonName || data.action,
+                    text: data.text,
+                    result
+                });
+            }
+
             return { success: true, result };
         } catch (error) {
             console.error('AI API调用失败:', error);
+            // 将错误也同步到结果窗口
+            if (global.currentResultWindow && !global.currentResultWindow.isDestroyed()) {
+                global.currentResultWindow.webContents.send('show-result', {
+                    action: data.buttonName || data.action,
+                    text: data.text,
+                    error: error.message
+                });
+            }
             return { success: false, error: error.message };
         }
     });
@@ -688,31 +730,17 @@ function startSmartSelectionDetector() {
     detectorWindow.hide();
     detectorWindow.on('closed', () => { detectorWindow = null; });
 
-    // 使用定时器检测选中的文本
+    // 使用定时器检测选中的文本（Linux 优先使用 selection；Windows/macOS 通过短暂复制并恢复剪贴板）
     smartDetectorInterval = setInterval(() => {
         if (isDetecting) return;
 
         const currentMousePos = screen.getCursorScreenPoint();
+        if (process.platform === 'linux') {
+            let selectedText = '';
+            try {
+                selectedText = (clipboard.readText('selection') || '').toString();
+            } catch {}
 
-        // 保存当前剪贴板
-        const oldClipboard = clipboard.readText();
-
-        // 清空剪贴板
-        clipboard.clear();
-
-        // 模拟复制
-        simulateCopyShortcut();
-
-        // 检查剪贴板
-        setTimeout(() => {
-            const selectedText = clipboard.readText();
-
-            // 恢复原剪贴板
-            if (oldClipboard) {
-                clipboard.writeText(oldClipboard);
-            }
-
-            // 如果有新的选中文本
             if (
                 selectedText &&
                 selectedText.trim().length > 0 &&
@@ -720,17 +748,44 @@ function startSmartSelectionDetector() {
                 selectedText.trim().length <= configStore.get('general.maxTextLength')
             ) {
                 lastSelectedText = selectedText;
-
-                // 显示悬浮窗
                 showFloatingWindow(currentMousePos, selectedText);
-
-                // 防止连续触发
                 isDetecting = true;
                 setTimeout(() => {
                     isDetecting = false;
                 }, 1000);
             }
-        }, 120);
+        } else {
+            // Windows/macOS: 短暂复制读取选择，并立即恢复原剪贴板
+            const oldClipboard = clipboard.readText();
+            try { clipboard.clear(); } catch {}
+            simulateCopyShortcut();
+
+            const tryRead = (attemptsLeft) => {
+                const selectedText = clipboard.readText();
+                if (!selectedText && attemptsLeft > 0) {
+                    return setTimeout(() => tryRead(attemptsLeft - 1), 60);
+                }
+
+                // 恢复原剪贴板
+                try { if (oldClipboard) clipboard.writeText(oldClipboard); } catch {}
+
+                if (
+                    selectedText &&
+                    selectedText.trim().length > 0 &&
+                    selectedText !== lastSelectedText &&
+                    selectedText.trim().length <= configStore.get('general.maxTextLength')
+                ) {
+                    lastSelectedText = selectedText;
+                    showFloatingWindow(currentMousePos, selectedText);
+                    isDetecting = true;
+                    setTimeout(() => {
+                        isDetecting = false;
+                    }, 1000);
+                }
+            };
+
+            tryRead(3); // 最多轮询 ~180ms
+        }
     }, 600); // 每600ms检查一次
 }
 
@@ -760,26 +815,25 @@ function registerGlobalShortcut(shortcut) {
 
     if (shortcut) {
         globalShortcut.register(shortcut, () => {
-            // 保存当前剪贴板
-            const oldClipboard = clipboard.readText();
+            const mousePos = screen.getCursorScreenPoint();
+            const showWithText = (text) => showFloatingWindow(mousePos, text || '');
 
-            // 模拟复制
-            simulateCopyShortcut();
-
-            // 等待复制完成
-            setTimeout(() => {
-                const selectedText = clipboard.readText();
-
-                if (selectedText && selectedText !== oldClipboard) {
-                    const mousePos = screen.getCursorScreenPoint();
-                    showFloatingWindow(mousePos, selectedText);
-
-                    // 恢复剪贴板
-                    setTimeout(() => {
-                        clipboard.writeText(oldClipboard);
-                    }, 100);
-                }
-            }, 80);
+            if (process.platform === 'linux') {
+                let selectedText = '';
+                try {
+                    selectedText = (clipboard.readText('selection') || '').toString();
+                } catch {}
+                showWithText(selectedText);
+            } else {
+                const oldClipboard = clipboard.readText();
+                try { clipboard.clear(); } catch {}
+                simulateCopyShortcut();
+                setTimeout(() => {
+                    const selectedText = clipboard.readText();
+                    try { if (oldClipboard) clipboard.writeText(oldClipboard); } catch {}
+                    showWithText(selectedText);
+                }, 80);
+            }
         });
     }
 }

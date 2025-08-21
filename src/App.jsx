@@ -39,37 +39,38 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        if (devMode !== null && devMode) {
-            document.addEventListener('keydown', async (e) => {
-                let allowKeys = ['c', 'v', 'x', 'a', 'z', 'y'];
-                if (e.ctrlKey && !allowKeys.includes(e.key.toLowerCase())) {
-                    e.preventDefault();
-                }
-                if (e.key === 'F12') {
+        const handler = async (e) => {
+            const allowKeys = ['c', 'v', 'x', 'a', 'z', 'y'];
+
+            if (e.ctrlKey && !allowKeys.includes((e.key || '').toLowerCase())) {
+                e.preventDefault();
+            }
+
+            if (devMode !== null && devMode) {
+                // 仅在无任何组合键时响应 F12，避免 Shift 误触
+                if (e.key === 'F12' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
                     await invoke('open_devtools');
-                }
-                if (e.key.startsWith('F') && e.key.length > 1) {
                     e.preventDefault();
                 }
-                if (e.key === 'Escape') {
-                    await appWindow.close();
-                }
-            });
-        } else {
-            document.addEventListener('keydown', async (e) => {
-                let allowKeys = ['c', 'v', 'x', 'a', 'z', 'y'];
-                if (e.ctrlKey && !allowKeys.includes(e.key.toLowerCase())) {
+                if (e.key && e.key.startsWith('F') && e.key.length > 1) {
                     e.preventDefault();
                 }
+            } else {
                 // 不阻止 F12，只阻止其他 F 键
-                if (e.key.startsWith('F') && e.key.length > 1 && e.key !== 'F12') {
+                if (e.key && e.key.startsWith('F') && e.key.length > 1 && e.key !== 'F12') {
                     e.preventDefault();
                 }
-                if (e.key === 'Escape') {
-                    await appWindow.close();
-                }
-            });
-        }
+            }
+
+            if (e.key === 'Escape') {
+                await appWindow.close();
+            }
+        };
+
+        document.addEventListener('keydown', handler);
+        return () => {
+            document.removeEventListener('keydown', handler);
+        };
     }, [devMode]);
 
     useEffect(() => {

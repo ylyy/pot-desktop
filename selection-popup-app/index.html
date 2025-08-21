@@ -515,7 +515,8 @@
                 // 调用 Electron API
                 const response = await window.electronAPI.performAIAction({
                     action: action,
-                    text: text
+                    text: text,
+                    requireCopy: true
                 });
 
                 if (response.success) {
