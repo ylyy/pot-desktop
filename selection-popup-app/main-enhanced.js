@@ -237,6 +237,31 @@ function registerIPCHandlers() {
                 floatingWindow.hide();
             }
 
+            // 仅在用户点击功能按钮时，根据需要执行一次复制，以避免实时干扰
+            if ((!data.text || data.text.trim().length === 0) && data.requireCopy === true) {
+                // 尝试不干扰用户：优先 Linux selection，其他平台仅在明确要求时才模拟复制
+                if (process.platform === 'linux') {
+                    try {
+                        const sel = clipboard.readText('selection');
+                        if (sel) data.text = sel;
+                    } catch {}
+                }
+                if (!data.text) {
+                    // 回退到模拟复制（尽量不破坏剪贴板）
+                    const oldClipboard = clipboard.readText();
+                    simulateCopyShortcut();
+                    await new Promise(r => setTimeout(r, 120));
+                    const copied = clipboard.readText();
+                    if (copied && copied !== oldClipboard) {
+                        data.text = copied;
+                        // 尽快恢复剪贴板
+                        setTimeout(() => {
+                            try { clipboard.writeText(oldClipboard); } catch {}
+                        }, 100);
+                    }
+                }
+            }
+
             const result = await callAIAPI(data);
 
             // 返回最终结果，并将最终内容推送到结果窗口（适配非流式/流式收尾）
@@ -705,49 +730,32 @@ function startSmartSelectionDetector() {
     detectorWindow.hide();
     detectorWindow.on('closed', () => { detectorWindow = null; });
 
-    // 使用定时器检测选中的文本
+    // 使用定时器检测选中的文本（Linux优先使用 selection，不干扰系统剪贴板；其他平台不主动复制）
     smartDetectorInterval = setInterval(() => {
         if (isDetecting) return;
 
         const currentMousePos = screen.getCursorScreenPoint();
 
-        // 保存当前剪贴板
-        const oldClipboard = clipboard.readText();
+        let selectedText = '';
+        if (process.platform === 'linux') {
+            try {
+                selectedText = (clipboard.readText('selection') || '').toString();
+            } catch {}
+        }
 
-        // 清空剪贴板
-        clipboard.clear();
-
-        // 模拟复制
-        simulateCopyShortcut();
-
-        // 检查剪贴板
-        setTimeout(() => {
-            const selectedText = clipboard.readText();
-
-            // 恢复原剪贴板
-            if (oldClipboard) {
-                clipboard.writeText(oldClipboard);
-            }
-
-            // 如果有新的选中文本
-            if (
-                selectedText &&
-                selectedText.trim().length > 0 &&
-                selectedText !== lastSelectedText &&
-                selectedText.trim().length <= configStore.get('general.maxTextLength')
-            ) {
-                lastSelectedText = selectedText;
-
-                // 显示悬浮窗
-                showFloatingWindow(currentMousePos, selectedText);
-
-                // 防止连续触发
-                isDetecting = true;
-                setTimeout(() => {
-                    isDetecting = false;
-                }, 1000);
-            }
-        }, 120);
+        if (
+            selectedText &&
+            selectedText.trim().length > 0 &&
+            selectedText !== lastSelectedText &&
+            selectedText.trim().length <= configStore.get('general.maxTextLength')
+        ) {
+            lastSelectedText = selectedText;
+            showFloatingWindow(currentMousePos, selectedText);
+            isDetecting = true;
+            setTimeout(() => {
+                isDetecting = false;
+            }, 1000);
+        }
     }, 600); // 每600ms检查一次
 }
 
@@ -777,26 +785,14 @@ function registerGlobalShortcut(shortcut) {
 
     if (shortcut) {
         globalShortcut.register(shortcut, () => {
-            // 保存当前剪贴板
-            const oldClipboard = clipboard.readText();
-
-            // 模拟复制
-            simulateCopyShortcut();
-
-            // 等待复制完成
-            setTimeout(() => {
-                const selectedText = clipboard.readText();
-
-                if (selectedText && selectedText !== oldClipboard) {
-                    const mousePos = screen.getCursorScreenPoint();
-                    showFloatingWindow(mousePos, selectedText);
-
-                    // 恢复剪贴板
-                    setTimeout(() => {
-                        clipboard.writeText(oldClipboard);
-                    }, 100);
-                }
-            }, 80);
+            const mousePos = screen.getCursorScreenPoint();
+            let selectedText = '';
+            if (process.platform === 'linux') {
+                try {
+                    selectedText = (clipboard.readText('selection') || '').toString();
+                } catch {}
+            }
+            showFloatingWindow(mousePos, selectedText);
         });
     }
 }
