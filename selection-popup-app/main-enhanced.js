@@ -730,31 +730,61 @@ function startSmartSelectionDetector() {
     detectorWindow.hide();
     detectorWindow.on('closed', () => { detectorWindow = null; });
 
-    // 使用定时器检测选中的文本（Linux优先使用 selection，不干扰系统剪贴板；其他平台不主动复制）
+    // 使用定时器检测选中的文本（Linux 优先使用 selection；Windows/macOS 通过短暂复制并恢复剪贴板）
     smartDetectorInterval = setInterval(() => {
         if (isDetecting) return;
 
         const currentMousePos = screen.getCursorScreenPoint();
-
-        let selectedText = '';
         if (process.platform === 'linux') {
+            let selectedText = '';
             try {
                 selectedText = (clipboard.readText('selection') || '').toString();
             } catch {}
-        }
 
-        if (
-            selectedText &&
-            selectedText.trim().length > 0 &&
-            selectedText !== lastSelectedText &&
-            selectedText.trim().length <= configStore.get('general.maxTextLength')
-        ) {
-            lastSelectedText = selectedText;
-            showFloatingWindow(currentMousePos, selectedText);
-            isDetecting = true;
-            setTimeout(() => {
-                isDetecting = false;
-            }, 1000);
+            if (
+                selectedText &&
+                selectedText.trim().length > 0 &&
+                selectedText !== lastSelectedText &&
+                selectedText.trim().length <= configStore.get('general.maxTextLength')
+            ) {
+                lastSelectedText = selectedText;
+                showFloatingWindow(currentMousePos, selectedText);
+                isDetecting = true;
+                setTimeout(() => {
+                    isDetecting = false;
+                }, 1000);
+            }
+        } else {
+            // Windows/macOS: 短暂复制读取选择，并立即恢复原剪贴板
+            const oldClipboard = clipboard.readText();
+            try { clipboard.clear(); } catch {}
+            simulateCopyShortcut();
+
+            const tryRead = (attemptsLeft) => {
+                const selectedText = clipboard.readText();
+                if (!selectedText && attemptsLeft > 0) {
+                    return setTimeout(() => tryRead(attemptsLeft - 1), 60);
+                }
+
+                // 恢复原剪贴板
+                try { if (oldClipboard) clipboard.writeText(oldClipboard); } catch {}
+
+                if (
+                    selectedText &&
+                    selectedText.trim().length > 0 &&
+                    selectedText !== lastSelectedText &&
+                    selectedText.trim().length <= configStore.get('general.maxTextLength')
+                ) {
+                    lastSelectedText = selectedText;
+                    showFloatingWindow(currentMousePos, selectedText);
+                    isDetecting = true;
+                    setTimeout(() => {
+                        isDetecting = false;
+                    }, 1000);
+                }
+            };
+
+            tryRead(3); // 最多轮询 ~180ms
         }
     }, 600); // 每600ms检查一次
 }
@@ -786,13 +816,24 @@ function registerGlobalShortcut(shortcut) {
     if (shortcut) {
         globalShortcut.register(shortcut, () => {
             const mousePos = screen.getCursorScreenPoint();
-            let selectedText = '';
+            const showWithText = (text) => showFloatingWindow(mousePos, text || '');
+
             if (process.platform === 'linux') {
+                let selectedText = '';
                 try {
                     selectedText = (clipboard.readText('selection') || '').toString();
                 } catch {}
+                showWithText(selectedText);
+            } else {
+                const oldClipboard = clipboard.readText();
+                try { clipboard.clear(); } catch {}
+                simulateCopyShortcut();
+                setTimeout(() => {
+                    const selectedText = clipboard.readText();
+                    try { if (oldClipboard) clipboard.writeText(oldClipboard); } catch {}
+                    showWithText(selectedText);
+                }, 80);
             }
-            showFloatingWindow(mousePos, selectedText);
         });
     }
 }
